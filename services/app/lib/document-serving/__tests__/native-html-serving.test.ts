@@ -15,6 +15,8 @@ import { PLATFORM_STYLES_PATH } from '@/lib/html-systems';
 import { buildHtmlAssets } from '@/lib/html-runtime/server';
 import { artifactPageAnswer, framedDocumentSrc } from '@/lib/document-serving';
 import { markPagesRequest } from '@/lib/http';
+import { createHash } from 'node:crypto';
+import { RUNTIME_MODULE_PATHS } from '@/lib/html-runtime/server';
 useAppHarness();
 const site=pagesSiteFor('pages.example.test','https://app.example.test');
 const source='<!doctype html><html><head><title>Native plan</title><script type="application/json" data-af="state">{"count":3}</script><script type="module">import {client} from "@afbin/apollo"; document.body.dataset.ready="yes"</script></head><body><h1 data-af-id="title">Native content</h1></body></html>';
@@ -227,4 +229,27 @@ it('tells a served page its declared connect hosts, which its core reaches throu
  expect(exported.config.connect).toBeUndefined();
  const plain=await nativeHtml.nativeHtmlDocument({row:{...row,source:'<!doctype html><html><head><title>Plain</title></head><body></body></html>'}});
  expect(plain.config.connect).toBeUndefined();
+});
+
+it('names each runtime module by its content address on a served page and preloads apollo, reader and state for a page that imports apollo; drafts and exports keep theirs',async()=>{
+ const assets=await buildHtmlAssets() as unknown as Record<string,string>;
+ const digest=(text:string)=>createHash('sha256').update(text).digest('hex');
+ const expected=Object.fromEntries(Object.entries(RUNTIME_MODULE_PATHS).map(([key,path])=>{const name=key.slice(0,-'Path'.length);return [name,`/af/v1/runtime/${digest(assets[name]!)}/${path.slice('/af/'.length)}`];}));
+ const row={id:'pinned-runtime',version:1,source,meta:{}};
+ const served=await nativeHtml.nativeHtmlDocument({row,appOrigin:'https://app.example.test'});
+ expect(served.config.modules).toEqual(expected);
+ const doc=new JSDOM(served.html).window.document;
+ expect(JSON.parse(doc.querySelector('[data-af="runtime"]')!.textContent!).modules).toEqual(expected);
+ const links=[...doc.querySelectorAll('link[rel="modulepreload"]')];
+ expect(links.map(link=>link.getAttribute('href'))).toEqual([expected.apollo,expected.reader,expected.state]);
+ expect(links.every(link=>link.hasAttribute('crossorigin'))).toBe(true);
+ // After the core, which installs the import map the preloaded modules' bare imports resolve through.
+ const head=[...doc.head.children];
+ expect(head.indexOf(links[0]!)).toBeGreaterThan(head.indexOf(doc.querySelector('script[data-af="core"]')!));
+ const plain=await nativeHtml.nativeHtmlDocument({row:{...row,source:'<!doctype html><html><head><title>Plain</title></head><body></body></html>'}});
+ expect(plain.config.modules).toEqual(expected);expect(plain.html).not.toContain('modulepreload');
+ const exported=await nativeHtml.nativeHtmlDocument({row,appOrigin:'https://app.example.test',offline:true});
+ expect(exported.config.modules).toBeUndefined();expect(exported.html).not.toContain('/af/v1/runtime/');expect(exported.html).not.toContain('modulepreload');
+ const draft=await nativeHtml.nativeDraftDocument({label:'d1',html:source,appOrigin:'https://app.example.test',datasets:[],tables:[]});
+ expect(draft).not.toContain('/af/v1/runtime/');expect(draft).not.toContain('modulepreload');
 });

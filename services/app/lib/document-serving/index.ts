@@ -19,7 +19,7 @@ export { artifactAppPath } from './artifact-pwa';
 export { artifactAppAsset, artifactAppIcon, artifactManifest, artifactPwaEnabled, readableApp, withArtifactAppHead } from './artifact-pwa.server';
 export { publicRefAsset, publicRefAssetResponse } from './public-ref-assets';
 export { componentModuleResponse } from './components.server';
-export { hostedBlocksManifestResponse, pinnedComponentResponse, pinnedHostResponse, pinnedStylesResponse } from './hosted-blocks.server';
+export { hostedBlocksManifestResponse, pinnedComponentResponse, pinnedHostResponse, pinnedRuntimeResponse, pinnedStylesResponse } from './hosted-blocks.server';
 export { nativeDraftDocument, nativeDraftPolicy } from './native-html.server';
 export type { NativeDraftRender } from './native-html.server';
 export { nativeHtmlCoreResponse, nativeHtmlDocument, nativeHtmlModuleResponse, nativeHtmlSystemsResponse, nativeHtmlTitle } from './native-html.server';

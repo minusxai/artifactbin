@@ -68,8 +68,9 @@ async function compile():Promise<HtmlRuntimeAssets>{
  const hostComments=await buildHostComments();
  const host=await esm(new URL('../html-reader/host-shell.ts',import.meta.url),{define:{__AF_HOST_COMMENTS__:JSON.stringify(hostCommentsPath(hostComments))}});
  const chrome=await buildPortableChrome();
- // D17: flat platform addresses, revalidated by ETag (no version or hash). A page open across a deploy can load a newer
- // lazy module against its older core, so every lazy module carries this build's id and refuses another core's (skewGuard).
+ // D17: a served page names each module at this build's content address (config.modules), others at the flat address
+ // revalidated by ETag. A page open across a deploy can load a newer lazy module against its older core (an old content
+ // address redirects to the flat one), so every lazy module carries this build's id and refuses another core's (skewGuard).
  const unguarded={apollo,reader:readerSource,chrome,portableEngine,morph,nativeRegions,nativeMarkdown,collab,state,offlineSql};
  const buildId=createHash('sha256').update(JSON.stringify(unguarded)).digest('hex').slice(0,16);
  const guarded=Object.fromEntries(Object.entries(unguarded).map(([key,source])=>[key,skewGuard(buildId)+source])) as typeof unguarded;
@@ -95,17 +96,20 @@ const blob=source=>URL.createObjectURL(new Blob([source],{type:'text/javascript'
 const base=document.currentScript.src||location.href;
 // A module a portable copy embeds (as a blob URL), else the platform's; a copy must embed reader and author.
 const moduleUrl=(block,url)=>block?blob(JSON.parse(block.textContent)):url.href;
+// A served page names this build's content address of each module (config.modules); anything else is the flat address.
+const pinned=config.modules&&typeof config.modules==='object'?config.modules:{};
+const at=(key,flat)=>{const value=pinned[key];return new URL(typeof value==='string'&&/^\\/af\\/v1\\/runtime\\/[a-f0-9]{64}\\/[a-z][a-z-]*\\.js$/.test(value)?value:flat,base);};
 const required=(block,what,url)=>{if(supplied&&config.offline&&!document.documentElement.hasAttribute('data-af-private-preview')&&!block)throw Error('Portable HTML is missing its '+what+' module');return moduleUrl(block,url);};
-const reader=required(document.querySelector('[data-af="reader"]'),'reader',new URL(${JSON.stringify(readerPath)},base));
+const reader=required(document.querySelector('[data-af="reader"]'),'reader',at('reader',${JSON.stringify(readerPath)}));
 const portable=document.querySelector('[data-af="apollo"]');
-const apollo=required(portable,'author',new URL(${JSON.stringify(apolloPath)},base));
-const state=moduleUrl(document.querySelector('[data-af="state-module"]'),new URL(${JSON.stringify(statePath)},base));
-const portableEngine=moduleUrl(document.querySelector('[data-af="portable-engine"]'),new URL(${JSON.stringify(portableEnginePath)},base));
-const chrome=moduleUrl(document.querySelector('[data-af="chrome"]'),new URL(${JSON.stringify(chromePath)},base));
+const apollo=required(portable,'author',at('apollo',${JSON.stringify(apolloPath)}));
+const state=moduleUrl(document.querySelector('[data-af="state-module"]'),at('state',${JSON.stringify(statePath)}));
+const portableEngine=moduleUrl(document.querySelector('[data-af="portable-engine"]'),at('portableEngine',${JSON.stringify(portableEnginePath)}));
+const chrome=moduleUrl(document.querySelector('[data-af="chrome"]'),at('chrome',${JSON.stringify(chromePath)}));
 const live=config.appOrigin&&!config.offline&&window.parent!==window;
 const sqlBlock=config.offline?document.querySelector('[data-af="offline-sql"]'):null;
 const collabBlock=document.querySelector('[data-af="collab"]');
-const collab=collabBlock||!config.offline?moduleUrl(collabBlock,new URL(${JSON.stringify(collabPath)},base)):null;
+const collab=collabBlock||!config.offline?moduleUrl(collabBlock,at('collab',${JSON.stringify(collabPath)})):null;
 // The source this document loaded, before its deferred and module scripts run: what a new version is compared against (./live-morph LOADED_SOURCE).
 // A framed page rebuilt from a new version (./live-morph rebuild) puts the reader back where the previous document left them.
 if(live)restoreReadingPlace(window,config.pageId);
@@ -115,7 +119,7 @@ const sharedBlock=config.offline?document.querySelector('[data-af="offline-modul
 const sharedImports={};if(sharedBlock)for(const [key,source]of Object.entries(JSON.parse(sharedBlock.textContent))){if(!(key.startsWith('@afbin/offline/')&&/^[a-f0-9]{64}$/.test(key.slice(15)))||typeof source!=='string')throw Error('Invalid embedded module table');sharedImports[key]=blob(source);}
 if(Object.keys(sharedImports).length)addEventListener('pagehide',event=>{if(!event.persisted)for(const url of Object.values(sharedImports))URL.revokeObjectURL(url);});
 const libraries={};if(!portable)for(const [key,value]of Object.entries(config.libraries??{}))if(/^@afbin\\/[a-z][a-z0-9-]*$/.test(key)&&/^\\/af\\/(?:lib\\/[a-z][a-z0-9-]*-\\d+\\.\\d+\\.\\d+\\/index|components\\/[a-z][a-z0-9-]*)\\.js$/.test(value))libraries[key]=new URL(value,base).href;
-const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...libraries,...sharedImports,'@afbin/apollo':apollo,'@afbin/state':state,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine,...(collab?{'@afbin/collab':collab}:{}),...(sqlBlock?{'@afbin/offline-sql':blob(JSON.parse(sqlBlock.textContent))}:config.draft&&!config.offline?{'@afbin/offline-sql':new URL(${JSON.stringify(DRAFT_SQL_ENGINE_PATH)},document.currentScript.src||location.href).href}:{}),...(live?{'@afbin/morph':new URL(${JSON.stringify(morphPath)},document.currentScript.src||location.href).href,'@afbin/native-markdown':new URL(${JSON.stringify(nativeMarkdownPath)},document.currentScript.src||location.href).href,'@afbin/native-regions':new URL(${JSON.stringify(nativeRegionsPath)},document.currentScript.src||location.href).href}:{})}});document.currentScript.after(map);
+const map=document.createElement('script');if(platformNonce)map.nonce=platformNonce;map.type='importmap';map.textContent=JSON.stringify({imports:{...libraries,...sharedImports,'@afbin/apollo':apollo,'@afbin/state':state,'@afbin/reader':reader,'@afbin/chrome':chrome,'@afbin/portable':portableEngine,...(collab?{'@afbin/collab':collab}:{}),...(sqlBlock?{'@afbin/offline-sql':blob(JSON.parse(sqlBlock.textContent))}:config.draft&&!config.offline?{'@afbin/offline-sql':new URL(${JSON.stringify(DRAFT_SQL_ENGINE_PATH)},document.currentScript.src||location.href).href}:{}),...(live?{'@afbin/morph':at('morph',${JSON.stringify(morphPath)}).href,'@afbin/native-markdown':at('nativeMarkdown',${JSON.stringify(nativeMarkdownPath)}).href,'@afbin/native-regions':at('nativeRegions',${JSON.stringify(nativeRegionsPath)}).href}:{})}});document.currentScript.after(map);
 // A fetch of a file the page published reads it wherever the page is (config.files), and a GET to a host it declares
 // goes through its fetch door (config.connect), before any author script runs (./page-fetch).
 installPageFetch(window,config.files,!config.offline&&Array.isArray(config.connect)&&config.connect.length?{pageId:config.pageId,origins:config.connect}:undefined);

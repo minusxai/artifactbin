@@ -33,12 +33,18 @@ const otherRes=await api('/api/artifacts',{method:'POST',body:JSON.stringify({ht
 const other=await otherRes.json();check(otherRes.status===201,'second private page publishes');
 const context=await browser.newContext({viewport:{width:1200,height:900}}),page=await context.newPage();
 await becomeOwner(page,APP,owner.token);
+// Every runtime module request, by module: a page names each at one address (core, import map, preload, module imports).
+const moduleRequests=target=>{const seen=new Map();target.on('request',request=>{const name=/^\/af\/(?:v1\/runtime\/[a-f0-9]{64}\/)?(apollo|reader|state)\.js$/.exec(new URL(request.url()).pathname)?.[1];if(name)seen.set(name,[...(seen.get(name)??[]),new URL(request.url()).pathname]);});return seen;};
+const framedModules=moduleRequests(page);
 await section('private origin and credential boundary',async()=>{
  const response=await page.goto(`${APP}/a/${owner.id}`,{waitUntil:'load'});
  const appCsp=response.headers()['content-security-policy']??'';
  check(!/\bblob:|\bhttps:/.test(appCsp.split(';').find(d=>d.trim().startsWith('script-src'))??''),'platform page retains strict script policy');
  check(await page.locator(DOCUMENT_FRAME).count()===1,'original chrome owns exactly one page frame');
  const frame=await documentFrame(page);await frame.waitForFunction(()=>document.querySelector('#choice')?.textContent==='east');
+ // The core itself imports the reader in a framed page: the same address the map and the preload name, so one fetch.
+ // This page imports only @afbin/state, so nothing is preloaded and apollo never loads.
+ check(['state','reader'].every(name=>framedModules.get(name)?.length===1&&framedModules.get(name)[0].startsWith('/af/v1/runtime/'))&&!framedModules.has('apollo'),`framed page fetches state and the reader once each, at their content addresses: ${JSON.stringify(Object.fromEntries(framedModules))}`);
  check(frame.url().startsWith(pages.origin(owner.id)),'private native HTML runs on its own page origin');
  const cookies=await context.cookies(pages.origin(owner.id));const ticket=cookies.find(cookie=>cookie.name==='afbin_pages');
  check(!!ticket&&ticket.httpOnly&&ticket.sameSite==='Lax'&&ticket.domain===new URL(pages.origin(owner.id)).hostname,'page ticket is HttpOnly, Lax and host-only');
@@ -72,10 +78,11 @@ await section('anonymous owner-host state runtime',async()=>{
  const url=new URL(post.user_page_url);check(url.hostname===`${username.replaceAll('_','-')}.u.lvh.me`&&url.origin!==APP,'browser targets owner host rather than canonical runner');
  const guest=await browser.newContext(),publicPage=await guest.newPage();
  try{
-  const modules=new Set();publicPage.on('response',response=>{if(response.status()===200&&new URL(response.url()).origin===url.origin)modules.add(new URL(response.url()).pathname);});
+  const modules=moduleRequests(publicPage);
   const response=await publicPage.goto(url.origin+'/',{waitUntil:'load'});check(response.status()===200,'anonymous owner-host page loads');
   await publicPage.waitForFunction(()=>document.querySelector('#choice')?.textContent==='east'&&document.querySelector('#data')?.textContent==='3'&&document.body.dataset.apollo==='true');
-  check(['/af/state.js','/af/apollo.js','/af/reader.js'].every(path=>modules.has(path)),'owner host serves the complete state and Apollo module closure');
+  check(['state','apollo','reader'].every(name=>modules.get(name)?.length===1&&modules.get(name)[0].startsWith('/af/v1/runtime/')),`owner host serves the complete state and Apollo module closure, each once at its content address: ${JSON.stringify(Object.fromEntries(modules))}`);
+  check(await publicPage.evaluate(()=>['apollo','reader','state'].every(name=>{const preload=document.querySelector(`link[rel="modulepreload"][href*="/${name}.js"]`);return preload&&performance.getEntriesByName(preload.href).length===1;})),'each preloaded module is the one its import uses: one fetch per module');
   await publicPage.locator('#advance').click();await publicPage.waitForFunction(()=>document.querySelector('#choice')?.textContent==='west'&&document.querySelector('#data')?.textContent==='7');
   check(true,'anonymous root-index owner-host click queries the public dataset and renders new rows');
   check(await publicPage.evaluate(()=>{try{localStorage.getItem('probe');return false}catch{return true}}),'opaque owner-host sandbox denies persistent browser storage');

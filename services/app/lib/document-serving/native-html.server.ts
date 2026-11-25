@@ -1,7 +1,7 @@
 import {nativeCodeHtml} from './native-code-html';
 import {hasImportedSourceObservation} from '../html-runtime/server';
 import {type HtmlAssemblyInput, type HtmlRuntimeConfig, assembleHtmlPage, downloadableHtml} from '@/lib/html-runtime';
-import {buildHtmlAssets} from '@/lib/html-runtime/server';
+import {buildHtmlAssets,runtimeModuleAddresses} from '@/lib/html-runtime/server';
 import {nativeHtmlAssets} from './native-html-assets.server';
 import {publishedFileTable,type PublicationRecord} from '@/lib/html-publication-bundle';
 import { createHash, randomUUID } from 'node:crypto';
@@ -76,10 +76,13 @@ export async function nativeHtmlDocument(input: NativeHtmlRender, keepOfflineSql
   const stored=(input.row.meta as {htmlScriptFingerprint?:unknown}).htmlScriptFingerprint;
   config.scriptFingerprint=typeof stored==='string'?stored:scriptFingerprint(source);
   const portable={version:1 as const,source,...(input.appOrigin?{identity:{platformOrigin:new URL(input.appOrigin).origin,artifactId:input.row.id,baseRevision:String(input.row.version),sourceDigest:createHash('sha256').update(source).digest('hex'),dependencyIdentity:config.bindings}}:{})};
-  const [rendered, core, decorate] = await Promise.all([
+  const [rendered, core, decorate, modules] = await Promise.all([
     input.offline ? input.renderedHtml ?? source : nativeHtmlAssets(input.row,captureKey),
     htmlCore(), input.presentation,
+    // A served page names this build's runtime modules at their content addresses (immutable); an export embeds them.
+    input.offline ? undefined : runtimeModuleAddresses(),
   ]);
+  if(modules)config.modules=modules;
   const assembly={decorate,platformScriptNonce:input.platformScriptNonce??randomUUID().replaceAll('-',''),...(input.unsavedIds?.size?{unsavedNodeIds:input.unsavedIds}:{}),portable,html:nativeCodeHtml(rendered),config,core,systemsHref:PLATFORM_STYLES_PATH,designSystem:input.designSystem??null,...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine,collab:(await htmlAssets()).collab,state:(await htmlAssets()).state,...(input.offlineData?.tables.length?{offlineData:input.offlineData,offlineSql:(await htmlAssets()).offlineSql}:{})}:{})};
   return {html:input.offline?downloadableHtml(assembly, keepOfflineSql):assembleHtmlPage(assembly),config};
 }
@@ -129,13 +132,14 @@ export function nativeHtmlTitle(row:Pick<ArtifactRow,'title'|'source'>):string {
 /** Immutable core bytes identify the runtime without assembling or reading a page. */
 let coreIdentity: Promise<string> | undefined;
 export function nativeHtmlRuntimeIdentity(): Promise<string> {
-  return coreIdentity ??= htmlAssets().then(({core,systems}) => {
+  return coreIdentity ??= Promise.all([htmlAssets(),runtimeModuleAddresses()]).then(([{core,systems},modules]) => {
     // Production is one emitted server bundle: its digest also names the assembler
     // and route code. Unbundled module reloads get a new cache identity.
     const file = fileURLToPath(import.meta.url);
     const implementation = /\.[cm]?js$/.test(file)
       ? createHash('sha256').update(readFileSync(file)).digest('hex') : `unbundled:${randomUUID()}`;
-    return etagOf({ core, systems: systems ? createHash('sha256').update(systems).digest('hex') : null, implementation });
+    // A served page names its runtime modules by content address: a new module digest is a new page.
+    return etagOf({ core, modules, systems: systems ? createHash('sha256').update(systems).digest('hex') : null, implementation });
   }).catch(error => { coreIdentity = undefined; throw error; });
 }
 
@@ -144,7 +148,7 @@ export async function nativeHtmlCoreResponse(request:Request):Promise<Response>{
  return publicRevalidatedResponse(request,await htmlCore(),JS);
 }
 
-/** A flat runtime module (D17: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js, /af/collab.js, /af/state.js, a draft's SQL engine /af/offline-sql.js) or the document host module (/af/host.js) and its comments (/af/host-comments.js), always this build's bytes. */
+/** A flat runtime module (D17, the address a page without content addresses names, `no-cache` with an ETag: /af/apollo.js, /af/reader.js, /af/chrome.js, /af/portable.js, /af/morph.js, /af/collab.js, /af/state.js, a draft's SQL engine /af/offline-sql.js) or the document host module (/af/host.js) and its comments (/af/host-comments.js), always this build's bytes. */
 export type NativeHtmlModule='apollo'|'reader'|'chrome'|'portableEngine'|'morph'|'nativeRegions'|'nativeMarkdown'|'collab'|'state'|'host'|'hostComments'|'offlineSql';
 export async function nativeHtmlModuleResponse(request:Request,module:NativeHtmlModule):Promise<Response>{
  const source=(await htmlAssets())[module];
