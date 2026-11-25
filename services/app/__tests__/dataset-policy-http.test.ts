@@ -6,8 +6,7 @@
  * nothing. `configuration` is server-owned. Everyone else gets the uniform 404.
  */
 import { expect, it } from 'vitest';
-import { mintAccountToken, request, useAppHarness, params } from './harness';
-import { identityForUser, type AccessActor } from '@/lib/accounts';
+import { mintAccountWithActor, request, useAppHarness, params } from './harness';
 import { getDb } from '@/lib/platform';
 import { createArtifactFromBody } from '@/lib/publish';
 import { getArtifactById } from '@/lib/artifacts';
@@ -17,11 +16,7 @@ import { seedShares, setArtifact } from '@/__tests__/rows';
 
 useAppHarness();
 
-type Person = Awaited<ReturnType<typeof person>>;
-async function person(name: string) {
-  const token = await mintAccountToken(`policy_${name}`);
-  return { ...token, actor: identityForUser(token.userId, token.id, token.email) as AccessActor };
-}
+type Person = Awaited<ReturnType<typeof mintAccountWithActor>>;
 const ROWS = { schema: 'public', name: 'rows' };
 const OWN_ROWS = {
   version: 3,
@@ -34,8 +29,11 @@ const OWN_ROWS = {
 };
 
 async function fixture() {
-  const owner = await person('owner'), editor = await person('editor'), viewer = await person('viewer'), stranger = await person('stranger');
-  const created = await createArtifactFromBody({ dataset: [{ name: 'a', created_by: 'x' }], title: 'Signups', access: 'readwrite', visibility: 'unlisted' }, owner.actor as AccessActor & { tokenId: string }, 'http://localhost:3000');
+  const owner = await mintAccountWithActor('policy_owner');
+  const editor = await mintAccountWithActor('policy_editor');
+  const viewer = await mintAccountWithActor('policy_viewer');
+  const stranger = await mintAccountWithActor('policy_stranger');
+  const created = await createArtifactFromBody({ dataset: [{ name: 'a', created_by: 'x' }], title: 'Signups', access: 'readwrite', visibility: 'unlisted' }, owner.actor, 'http://localhost:3000');
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const id = created.body.id as string;
   const db = await getDb();
