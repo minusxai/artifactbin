@@ -2,7 +2,7 @@ import { liveConnectionDetails, liveSchema, testLiveConnection, updateLiveConnec
 import { connectionTestRateLimited } from '@/lib/allowances';
 import {documentOwner} from '@/lib/user-pages';
 import { artifactSummaryToWire, createdArtifactWire, parseExpectedVersion, parseParentField, parseVisibilityValue, updateMetadataFromBody, versionToWire } from '@/lib/artifact-wire';
-import { admitRead, canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, transferArtifact } from '@/lib/artifacts';
+import { admitRead, canReadArtifact, capabilityGuard, findDependentsFor, getArtifactById, getVersionFor, isParentRefusal, isVersionNotArchived, listArtifactPageFor, listVersionPageFor, type MutationReceipt, resolveParent, revertArtifactFor, parseArtifactDestination, transferArtifact, TransferConflict } from '@/lib/artifacts';
 import { effectiveRole, holdsCreatingToken } from '@/lib/artifact-access';
 import { respondToMutate } from '@/lib/document-data';
 import {GROUP_OPERATIONS} from './groups';
@@ -405,15 +405,15 @@ const updateMetadataOp: Operation = {
 
 const transferArtifactOp: Operation = {
  name:'transfer_artifact',title:'Transfer artifact ownership',http:{method:'POST',path:'/api/artifacts/{id}/transfer'},
- description:'Deliberately transfer an artifact or complete folder subtree (including trashed descendants) to Personal or a group where you are an editor. Requires current ownership. IDs/history remain; external dependencies can refuse transfer. A busy transfer returns 409 without changes; retry after the competing operation finishes. Defaults and ordinary edits never transfer ownership.',
+ description:'Deliberately transfer an artifact or complete folder subtree (including trashed descendants) to Personal or a group where you are an editor. Requires current ownership. IDs/history remain. Work it depends on with the same owner (such as the datasets a page reads) moves with it in the same call and lands at the destination root; a dependency with another owner, or work left behind that uses a moved item, refuses the transfer and the refusal names the blocking items you can see. A busy transfer returns 409 without changes; retry after the competing operation finishes. Defaults and ordinary edits never transfer ownership.',
  input:{id:z.string(),destination:z.discriminatedUnion('type',[z.object({type:z.literal('personal')}).strict(),z.object({type:z.literal('group'),id:z.string().min(1)}).strict()])},
  annotations:{},example:{input:{id:'aB3xK9',destination:{type:'group',id:'grp_team'}}},
- errors:[NOT_FOUND,{status:403,code:'transfer_refused',fix:'Control the current owner and require editor membership in the destination group.'},{status:409,code:'transfer_conflict',fix:'Read the refusal: retry contention after other work finishes; include dependencies or retain their current owner.'}],
+ errors:[NOT_FOUND,{status:403,code:'transfer_refused',fix:'Control the current owner and require editor membership in the destination group.'},{status:409,code:'transfer_conflict',fix:'Read the refusal details: retry contention after other work finishes; for work left behind that uses a moved item, transfer them together in one folder or include the named item; for a dependency with another owner, transfer it to the same owner first or remove the reference.'}],
  async run(ctx,input){
   try{const destination=parseArtifactDestination(input.destination);if(!destination)return reply({error:'invalid_destination'},400);
    const row=await transferArtifact(ctx.actor,String(input.id),destination);
    return row?reply({id:row.id,owner:destination,group_id:row.group_id,user_id:row.user_id}):reply({error:'not_found'},404);
-  }catch(error){if(error instanceof DatasetError)return reply({error:error.status===409?'transfer_conflict':'transfer_refused',details:[error.message]},error.status);throw error;}
+  }catch(error){if(error instanceof DatasetError)return reply({error:error.status===409?'transfer_conflict':'transfer_refused',details:error instanceof TransferConflict?error.details:[error.message]},error.status);throw error;}
  },
 };
 

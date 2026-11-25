@@ -219,3 +219,71 @@ it('preserves the twelve-character truncation of legacy ref tokens',async()=>{
  expect((await f.move(id,{type:'group',id:'grp_ownership'})).status).toBe(409);
  expect((await getArtifactById(id))?.user_id).toBe(f.creator.id);
 });
+
+const livePage=(dataset:string,text:string)=>`<!doctype html><html><head><link rel="af-dataset" data-af-name="data" href="ref:${dataset}" data-af-mode="live"></head><body><p>${text}</p></body></html>`;
+
+it('moves a page together with its own datasets in one call, ids unchanged and readable by the group',async()=>{
+ const f=await fixture();
+ const dataset=await f.make({dataset:[{n:1}],title:'Own data',visibility:'private'});
+ const page=await f.make({html:livePage(dataset,'Own report'),title:'Own report',visibility:'private'});
+ const moved=await f.move(page,{type:'group',id:'grp_ownership'});expect(moved.status,await moved.clone().text()).toBe(200);
+ expect(await moved.json()).toMatchObject({id:page,group_id:'grp_ownership',user_id:null});
+ for(const id of [page,dataset]){
+  const row=(await getArtifactById(id))!;expect(row).toMatchObject({id,group_id:'grp_ownership',user_id:null,ancestor_ids:[]});
+  expect(await canReadArtifact(row,identityForUser(f.viewer.id,f.c.id,f.viewer.email!))).toBe(true);
+ }
+ const audit=(await f.db.query<{artifact_id:string}>('SELECT artifact_id FROM ownership_transfers ORDER BY artifact_id COLLATE "C"')).rows.map(row=>row.artifact_id);
+ expect(audit).toEqual([page,dataset].sort());
+});
+
+it('pulls a dependency out of a folder the actor is not moving and lands it at the destination root',async()=>{
+ const f=await fixture();
+ const shelf=await f.make({format:'folder',title:'Data shelf'});
+ const dataset=await f.make({dataset:[{n:1}],title:'Shelved data',parent_id:shelf});
+ const sibling=await f.make({dataset:[{n:2}],title:'Left behind',parent_id:shelf});
+ const page=await f.make({html:livePage(dataset,'Shelf report'),title:'Shelf report'});
+ const moved=await f.move(page,{type:'group',id:'grp_ownership'});expect(moved.status,await moved.clone().text()).toBe(200);
+ expect(await getArtifactById(dataset)).toMatchObject({group_id:'grp_ownership',user_id:null,ancestor_ids:[]});
+ expect(await getArtifactById(shelf)).toMatchObject({user_id:f.creator.id,group_id:null});
+ expect(await getArtifactById(sibling)).toMatchObject({user_id:f.creator.id,group_id:null,ancestor_ids:[shelf]});
+});
+
+it('refuses when a dependency stays used by work left behind, naming that work, and changes nothing',async()=>{
+ const f=await fixture();
+ const dataset=await f.make({dataset:[{n:1}],title:'Shared data'});
+ const page=await f.make({html:livePage(dataset,'Moving report'),title:'Moving report'});
+ const other=await f.make({html:livePage(dataset,'Staying report'),title:'Staying report'});
+ const refused=await f.move(page,{type:'group',id:'grp_ownership'});expect(refused.status).toBe(409);
+ const body=await refused.json();expect(body.error).toBe('transfer_conflict');
+ expect(body.details[0]).toContain(other);expect(body.details[0]).toContain('Staying report');expect(body.details).toContain(`"Staying report" (${other})`);
+ expect(body.details.join('\n')).toMatch(/together in one folder/);
+ for(const id of [page,dataset,other])expect(await getArtifactById(id)).toMatchObject({user_id:f.creator.id,group_id:null});
+ expect((await f.db.query('SELECT id FROM ownership_transfers')).rows).toHaveLength(0);
+});
+
+it('still refuses a dependency owned by someone else',async()=>{
+ const f=await fixture();
+ const foreign=await create(request('/api/artifacts',{method:'POST',token:f.b.token,json:{dataset:[{n:1}],title:'Their data',visibility:'private',destination:{type:'personal'}}}));expect(foreign.status).toBe(201);
+ const theirs=(await foreign.json()).id as string;
+ const page=await f.make({html:nativeHtml('<p>Borrowing</p>'),title:'Borrowing'});
+ await setArtifact(f.db,page,{meta:JSON.stringify({htmlLinks:[{kind:'live-dataset',name:'data',datasetId:theirs,mode:'live'}]})});
+ const refused=await f.move(page,{type:'group',id:'grp_ownership'});expect(refused.status).toBe(409);
+ const body=await refused.json();expect(body.details[0]).toMatch(/different owner/);
+ expect(body.details[0]).toContain(theirs);expect(body.details).toContain(theirs);expect(body.details.join('\n')).not.toContain('Their data');
+ expect(await getArtifactById(page)).toMatchObject({user_id:f.creator.id});expect(await getArtifactById(theirs)).toMatchObject({user_id:f.editor.id});
+});
+
+it('names the actor own trashed work that still uses a dependency and follows dependencies transitively',async()=>{
+ const f=await fixture();
+ const base=await f.make({dataset:[{n:1}],title:'Base data'});
+ const derived=await f.make({dataset:[{n:2}],title:'Derived data'});
+ await f.db.query("UPDATE artifacts SET meta=meta||jsonb_build_object('refs',jsonb_build_array(jsonb_build_object('id',$2::text))) WHERE id=$1",[derived,base]);
+ const page=await f.make({html:livePage(derived,'Chain report'),title:'Chain report'});
+ const old=await f.make({html:livePage(base,'Old report'),title:'Old report'});
+ await trashArtifactFor(identityForUser(f.creator.id,f.a.id),old);
+ const refused=await f.move(page,{type:'group',id:'grp_ownership'});expect(refused.status).toBe(409);
+ expect((await refused.json()).details[0]).toContain(`"Old report" (${old})`);
+ await f.db.query('DELETE FROM artifacts WHERE id=$1',[old]);
+ const moved=await f.move(page,{type:'group',id:'grp_ownership'});expect(moved.status,await moved.clone().text()).toBe(200);
+ for(const id of [page,derived,base])expect(await getArtifactById(id)).toMatchObject({group_id:'grp_ownership',user_id:null});
+});
