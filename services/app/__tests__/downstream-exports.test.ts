@@ -16,6 +16,7 @@ import { POST as annotate } from '@/app/api/artifacts/[id]/annotations/[annId]/r
 import { GET as listArtifacts, POST as createArtifact } from '@/app/api/artifacts/route';
 import { GET as skillZip } from '@/app/skills/artifactbin.zip/route';
 import { createUser, exchangePagesTicket, identityForUser, issuePagesTicket, pagesSessionOf } from '@/lib/accounts';
+import { createUser as createTestUser } from '@/lib/accounts/testing';
 import { mintToken } from '@/lib/accounts/tokens';
 import type { MutationInvocationFactory } from '@/lib/artifacts/mutation-invocation';
 import { mintExportKey } from '@/lib/export';
@@ -30,7 +31,7 @@ describe('the deployment and the evals compose from', () => {
   it('these functions', () => {
     const functions = {
       bearerIdentity, mintAccountToken, request, testIdentity, useAppHarness, getArtifact, listAnnotations, createAnnotation, annotate,
-      listArtifacts, createArtifact, skillZip, createUser, exchangePagesTicket, identityForUser, issuePagesTicket, pagesSessionOf, mintToken,
+      listArtifacts, createArtifact, skillZip, createUser, createTestUser, exchangePagesTicket, identityForUser, issuePagesTicket, pagesSessionOf, mintToken,
       mintExportKey, exportAssetUrl, setServices, overrideConfig: config.overrideConfig, resetConfigOverrides: config.resetConfigOverrides, getDb,
       resetDb, createAppHost, objectStore,
     };
