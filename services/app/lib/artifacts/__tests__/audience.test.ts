@@ -37,6 +37,19 @@ describe('the sharing surface', () => {
     expect(await updateSharingFor(stranger, row.id, { visibility: 'public' })).toBeNull();
   });
 
+  it('keeps the resolved account when replacing a granted share at the same address', async () => {
+    const owner = await person('owner');
+    const friend = await person('friend');
+    const row = await mine(owner);
+    await changeMembership(owner, row.id, { action: 'invite', usernames: ['@friend'], includeAccess: true });
+
+    await updateSharingFor(owner, row.id, { shares: [{ email: 'friend@example.test', role: 'editor' }] });
+    const db = await harness.db();
+    expect((await db.query('SELECT user_id, role FROM artifact_shares WHERE artifact_id=$1', [row.id])).rows)
+      .toEqual([{ user_id: friend.userId, role: 'editor' }]);
+    expect((await head(row.id)).sharing_revision).toBe(2);
+  });
+
   it('a dataset\'s sharing names its write ACL and the documents that write it', async () => {
     const owner = await person('owner');
     const data = await dataset(owner);

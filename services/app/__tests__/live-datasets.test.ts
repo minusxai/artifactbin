@@ -23,7 +23,7 @@ import { getDb, TABLES } from '@/lib/platform';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { writeDatasetPermissions } from '@/lib/dataset-access';
 import { createArtifactFromBody, forkArtifact, replaceArtifactWithBody } from '@/lib/publish';
-import { closeLiveDatasetConnections, setLiveDatasetNetworkSeams } from '@/lib/live-datasets';
+import { closeLiveDatasetConnections, setLiveDatasetNetworkSeams, updateLiveConnection } from '@/lib/live-datasets';
 import { GET as connectionGet, PATCH as connectionPatch } from '@/app/api/artifacts/[id]/connection/route';
 import { POST as connectionTest } from '@/app/api/artifacts/[id]/connection/test/route';
 import { GET as schemaGet } from '@/app/api/artifacts/[id]/connection/schema/route';
@@ -152,6 +152,34 @@ it('lets only its owner and editors change the connection, keeps an omitted secr
   expect((await patch(alice, { port: wire.port })).body.error).toBe('secret_required');
   expect((await patch(alice, { port: wire.port, password: PASSWORD })).status).toBe(200);
   expect((await call(queryPost as never, `/api/artifacts/${id}/query`, id, alice, { method: 'POST', json: { sql: 'select 1 as one' } })).status).toBe(200);
+});
+
+it('rolls back the sealed connection and revision if saving the artifact summary fails', async () => {
+  const owner = await person('alice');
+  const id = (await createLive(owner)).body.id;
+  const db = await getDb();
+  const state = async () => (await db.query(
+    'SELECT a.meta, a.version, c.config, c.sealed, c.revision FROM artifacts a JOIN dataset_connections c ON c.dataset_id=a.id WHERE a.id=$1',
+    [id],
+  )).rows[0];
+  const before = await state();
+  expect(before).toMatchObject({ version: 1, revision: 1, config: { host: '127.0.0.1' } });
+
+  // Fail the second write at the database, after the connection update has run.
+  await db.query("ALTER TABLE artifacts ADD CONSTRAINT refuse_connection_summary CHECK (meta #>> '{connection,fields,host}' IS DISTINCT FROM 'localhost')");
+  const edit = () => updateLiveConnection(owner.actor, id, { host: 'localhost', password: 'replacement' });
+  try {
+    await expect(edit()).rejects.toMatchObject({ code: '23514', constraint: 'refuse_connection_summary' });
+    expect(await state()).toEqual(before);
+  } finally {
+    await db.query('ALTER TABLE artifacts DROP CONSTRAINT refuse_connection_summary');
+  }
+
+  expect((await edit()).status).toBe(200);
+  expect(await state()).toMatchObject({
+    version: 1, revision: 2, config: { host: 'localhost' },
+    meta: { connection: { fields: { host: 'localhost' } } },
+  });
 });
 
 it('answers free SQL for owners and editors only, through the page and the agent door, on the dataset\'s connection', async () => {

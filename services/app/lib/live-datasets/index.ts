@@ -44,7 +44,7 @@ import { SQL_FAILURE_FOR_CONNECTOR, sqlReadFailure } from '@artifactbin/contract
 import { liveSource } from '@artifactbin/contracts/sql-source';
 import { ConnectorFailure, colonParameters, connectionSummary, connectorError, connectorList, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type NetworkSeams, type OpenConnection } from '@artifactbin/connectors';
 import type { AccessActor } from '@/lib/accounts';
-import { canReadArtifact, getArtifactById, setLiveDatasetSummary, type LiveConnectionInsert } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, saveLiveDatasetConnection, type LiveConnectionInsert } from '@/lib/artifacts';
 import { lockAuthorization, transactionAccessFacts, type ArtifactRow } from '@/lib/artifact-access';
 import { VIEWER_PARAMS, connectorViewer, viewerParams } from '@/lib/connections';
 import { liveConnectionOf, liveQueryRoles } from '@/lib/datasets';
@@ -295,9 +295,8 @@ export async function updateLiveConnection(actor: AccessActor, id: string, input
       if (moved.length && kept.length) throw new LiveDatasetRefusal(400, 'secret_required', `changing ${moved.join(', ')} needs ${kept.join(' and ')} again: a stored secret is never sent to a changed connection`);
       const { open: config, secrets } = split(candidate);
       const sealed = Object.keys(secrets).length ? datasetConnectionCipher().seal(JSON.stringify(secrets), [PURPOSE, id]) : null;
-      await tx.query('UPDATE dataset_connections SET config = $2::jsonb, sealed = $3, revision = revision + 1, updated_at = now() WHERE dataset_id = $1', [id, JSON.stringify(config), sealed]);
       const summary = connectionSummary(candidate);
-      await setLiveDatasetSummary(tx, id, summary as unknown as Record<string, unknown>);
+      await saveLiveDatasetConnection(tx, id, config, sealed, summary);
       return summary;
     });
     evict(id);

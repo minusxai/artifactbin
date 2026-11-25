@@ -1,20 +1,13 @@
 /**
- * THE TABLE-OWNERSHIP CHECK (part of `npm run validate`).
+ * THE TABLE-OWNERSHIP CHECK (part of npm run validate).
  *
- * A table is written by the module that owns it: artifacts and their live region tables by lib/artifacts; the identity tables
- * (contracts `IDENTITY_OWNED_TABLES`: users, tokens, handles, groups, memberships, invitations, the hierarchy
- * revision and the group mail outbox) by the identity module, the auth package (`services/auth/src/`), which the
- * app reaches only through its service contract (lib/platform `services().identity`). Every other module that
- * needs one of those writes calls the owner. Reads and joins are anyone's; `FOR UPDATE`/`FOR SHARE` locks are
- * anyone's on `artifacts`, but never on an identity table outside its owner: in a split-role database the app
- * role holds only SELECT there, and a row lock needs UPDATE (42501), so an app decision reads identity rows
- * plainly and never blocks, or is blocked by, an identity write.
+ * Each app table has a product write owner or is retained without a product writer.
+ * Identity tables belong to the auth package and the app writes through services().identity.
+ * Reads and joins are shared. Identity row locks stay inside auth because the app role has
+ * SELECT only there, and an app decision must not wait for or block an identity write.
  *
- * The check reads every string and template literal of non-test source with the TypeScript parser (so a
- * comment that quotes a statement is not one) and refuses an `UPDATE`, `INSERT INTO` or `DELETE FROM` naming
- * an owned table outside its owner, and a row lock that covers an identity table outside its owner. IMPORTERS
- * lists the code that recreates, erases or rewrites whole rows on purpose: test-user erasure (its artifacts; its
- * identity rows go through the identity service like every other write) and the test fixtures package (anything).
+ * The TypeScript parser extracts literal SQL from non-test sources. Runtime-built table
+ * names, generated migrations, cascades and database grants are outside this static check.
  *
  *   node scripts/ci/table-ownership.mjs [--root <dir>]
  */
@@ -28,34 +21,81 @@ import { tsImport } from 'tsx/esm/api';
 const ts = createRequire(import.meta.url)('typescript');
 const { IDENTITY_OWNED_TABLES } = await tsImport('../../services/contracts/src/identity-module.ts', import.meta.url);
 
+const { TABLES } = await tsImport('../../services/app/lib/platform/schema.ts', import.meta.url);
 const IDENTITY_OWNER = 'services/auth/src/';
-const ARTIFACT_OWNER = 'services/app/lib/artifacts/';
-const OWNERS = {
-  artifacts: ARTIFACT_OWNER,
-  region_states: ARTIFACT_OWNER,
-  region_updates: ARTIFACT_OWNER,
-  region_snapshots: ARTIFACT_OWNER,
-  ...Object.fromEntries(IDENTITY_OWNED_TABLES.map(table => [table, IDENTITY_OWNER])),
+const APP_LIB = 'services/app/lib/';
+
+/** Map by write boundary. Each declared app table must occur exactly once. */
+const APP_OWNERS = {
+  accounts: ['codes', 'pages_sessions'],
+  analytics: ['canonical_view_totals', 'canonical_view_visitors'],
+  annotations: ['annotations', 'comment_images', 'comment_reactions'],
+  'artifact-access': ['artifact_shares'],
+  artifacts: [
+    'artifact_creation_operations', 'artifact_edits', 'artifact_group_shares', 'artifact_id_registry',
+    'artifact_source_ids', 'artifact_versions', 'artifacts', 'dataset_connections', 'dataset_policy_audit',
+    'id_reservation_batches', 'legacy_page_migrations', 'mutation_receipts', 'ownership_transfers',
+    'prepared_pages', 'region_snapshots', 'region_states', 'region_updates',
+  ],
+  datasets: ['dataset_usage'],
+  deployment: ['deployment_members', 'deployment_state'],
+  'document-data': ['dataset_images'],
+  export: ['export_image_cache', 'export_images'],
+  groups: ['group_audit', 'group_links', 'group_quotas'],
+  notifications: ['member_notifications', 'user_blocks'],
+  'object-store': ['object_writes'],
+  platform: ['event_outbox', 'identity_settings'],
+  publish: ['web_assets'],
+  'query-approvals': ['page_query_approvals'],
+  social: ['relations'],
+  trust: ['document_trust', 'group_trust'],
+  'user-pages': ['user_site_roots'],
 };
+/** Still declared for existing installations; no in-tree serving writer. */
+const RETAINED_TABLES = ['analytics_events', 'artifact_view_totals', 'data_snapshots', 'mermaid_harvests', 'mermaid_images', 'native_identity_imports'];
+const appOwners = [
+  ...Object.entries(APP_OWNERS).flatMap(([module, tables]) => tables.map(table => [table, APP_LIB + module + '/'])),
+  ...RETAINED_TABLES.map(table => [table, null]),
+];
+const OWNERS = new Map([...appOwners, ...IDENTITY_OWNED_TABLES.map(table => [table, IDENTITY_OWNER])]);
 /** Owned tables no other module may row-lock either (see the header). */
 const LOCK_OWNED = new Set(IDENTITY_OWNED_TABLES);
-/** Path prefixes (ending in `/`) or exact files allowed to rewrite artifact rows. */
-const IMPORTERS = [
-  'services/app/lib/operations/testuser-erase.ts',
-  'services/test-support/',
-];
-/** …and the one importer allowed to write the identity tables too: fixtures, which run on a test's own database. */
-const IDENTITY_IMPORTERS = ['services/test-support/'];
+const FIXTURES = 'services/test-support/';
 
-const NAMES = Object.keys(OWNERS).join('|');
-/** An optional schema: `public.`, or an interpolated one (`${schema}.`, which a parsed literal reads as `${}.`). */
-const SCHEMA = String.raw`(?:(?:"?public"?|\$\{[^}]*\})\.)?`;
-const WRITE = new RegExp(String.raw`(?<!\bFOR\s+)\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+(?:ONLY\s+)?${SCHEMA}"?(${NAMES})"?(?!\w)`, 'gi');
+/** Exact file, operation and table. Keep the caller's transaction and its existing SQL order. */
+const EXCEPTIONS = {
+  // Hard erasure sweeps app tables by schema-derived artifact/account keys as one retryable transaction.
+  // These are its literal deletes for rows requiring an extra predicate or a specific position in the sweep.
+  'services/app/lib/operations/testuser-erase.ts': {
+    'DELETE FROM': ['annotations', 'artifacts', 'comment_reactions', 'member_notifications', 'relations', 'user_blocks'],
+  },
+  // Membership already holds artifact and participant locks. Dismiss the matching pending invite
+  // before changing the relation and projecting the event to the inbox, in that same transaction.
+  'services/app/lib/artifacts/membership/membership.ts': { UPDATE: ['member_notifications'] },
+  // The boot connection migrates legacy follows/likes before getDb() can return a serving connection.
+  'services/app/lib/platform/db.ts': { UPDATE: ['relations'] },
+  // Operator transactions span the auth and app schemas. The audit row commits with the new root or
+  // with the reviewed seat changes; enrollment uses the audit record to make replay idempotent.
+  'services/auth/scripts/prepare-company-root.ts': { 'INSERT INTO': ['group_audit'] },
+  'services/auth/scripts/enroll-company-root.ts': { 'INSERT INTO': ['group_audit'] },
+};
+
+const NAMES = [...OWNERS.keys()].join('|');
+/** A schema qualifier may be literal or an interpolation. */
+const IDENTIFIER = String.raw`(?:"[^"]+"|[a-z_][\w$]*)`;
+const SCHEMA = String.raw`(?:(?:${IDENTIFIER}|\$\{[^}]*\})\s*\.\s*)?`;
+const TABLE_REF = String.raw`(?:ONLY\s+)?${SCHEMA}${IDENTIFIER}`;
+const OWNED_NAME = String.raw`(?:"(?:${NAMES})"|(?:${NAMES})(?![\w$]))`;
+const TARGET = String.raw`(?:ONLY\s+)?${SCHEMA}(${OWNED_NAME})`;
+const WRITE = new RegExp(String.raw`(?<!\bFOR\s+)\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM|MERGE\s+INTO)\s+${TARGET}`, 'gi');
+const TRUNCATE = new RegExp(String.raw`\bTRUNCATE\s+(?:TABLE\s+)?((?:${TABLE_REF}\s*,\s*)*${TABLE_REF})`, 'gi');
+const TRUNCATED_TABLE = new RegExp(String.raw`(?:^|,)\s*${TARGET}`, 'gi');
 /** A row lock, and the aliases it names (`FOR SHARE OF s, m`), if any. */
 const LOCK = /\bFOR\s+(?:NO\s+KEY\s+)?(?:UPDATE|SHARE|KEY\s+SHARE)\b(?:\s+OF\s+([\w\s,]+?))?(?=\s*(?:NOWAIT|SKIP\s+LOCKED|\)|;|$|\bFOR\b|\bLIMIT\b))/gi;
 const SOURCE_TABLE = new RegExp(String.raw`\b(?:FROM|JOIN)\s+(?:ONLY\s+)?${SCHEMA}"?(\w+)"?(?:\s+(?:AS\s+)?(?!(?:WHERE|JOIN|LEFT|RIGHT|INNER|FULL|CROSS|ON|USING|ORDER|GROUP|LIMIT|FOR|UNION|WINDOW|HAVING|AS)\b)(\w+))?`, 'gi');
-/** The same patterns over raw text: a file without a match anywhere is not parsed. */
-const MENTIONS = new RegExp(WRITE.source, 'i');
+// Keep the raw-text prefilter looser than the SQL patterns: quotes and whitespace can be escaped in source.
+const MENTIONS_WRITE = /UPDATE|INSERT|DELETE|MERGE|TRUNCATE/i;
+const MENTIONS_OWNED_TABLE = new RegExp(NAMES, 'i');
 const MENTIONS_LOCK = /\bFOR\s+(?:NO\s+KEY\s+)?(?:UPDATE|SHARE|KEY\s+SHARE)\b/i;
 const LOCK_TABLE = new RegExp(String.raw`\b(${[...LOCK_OWNED].join('|')})\b`, 'i');
 
@@ -73,8 +113,7 @@ function lockedIdentityTables(statement) {
   return [...locked];
 }
 const SOURCE = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/;
-const isTest = file => /\.test\.\w+$/.test(file) || /(^|\/)__tests__\//.test(file);
-const allowed = (file, prefixes) => prefixes.some(prefix => prefix.endsWith('/') ? file.startsWith(prefix) : file === prefix);
+const isTest = file => file.startsWith('services/app/test/') || /\.test\.\w+$/.test(file) || /(^|\/)__tests__\//.test(file);
 
 /** The text of every string and template literal in a source file; a substitution reads as `${}`. */
 function literals(file, text) {
@@ -90,24 +129,52 @@ function literals(file, text) {
   return out.map(literal => ({ ...literal, line: source.getLineAndCharacterOfPosition(literal.pos).line + 1 }));
 }
 
-/** Policy: `files` ({ path, text }, repository-relative) → one readable line per refused write. */
-export function tableOwnershipViolations(files, importers = IMPORTERS) {
+const tableName = identifier => identifier.replace(/^"|"$/g, '').toLowerCase();
+
+/** Each owned target in a literal write, including every listed TRUNCATE target. */
+function* writtenTables(statement) {
+  for (const match of statement.matchAll(WRITE)) yield [match[1].replace(/\s+/g, ' ').toUpperCase(), tableName(match[2])];
+  for (const [, tables] of statement.matchAll(TRUNCATE)) {
+    for (const match of tables.matchAll(TRUNCATED_TABLE)) yield ['TRUNCATE', tableName(match[1])];
+  }
+}
+
+/** Policy: files ({ path, text }, repository-relative) → one readable line per refused write. */
+export function tableOwnershipViolations(files) {
   const violations = [];
   for (const { path: file, text } of files) {
-    if (!SOURCE.test(file) || isTest(file) || allowed(file, IDENTITY_IMPORTERS)) continue;
-    const writes = MENTIONS.test(text), locks = !file.startsWith(IDENTITY_OWNER) && MENTIONS_LOCK.test(text) && LOCK_TABLE.test(text);
+    if (!SOURCE.test(file) || isTest(file) || file.startsWith(FIXTURES)) continue;
+    const writes = MENTIONS_WRITE.test(text) && MENTIONS_OWNED_TABLE.test(text);
+    const locks = !file.startsWith(IDENTITY_OWNER) && MENTIONS_LOCK.test(text) && LOCK_TABLE.test(text);
     if (!writes && !locks) continue;
     for (const literal of literals(file, text)) {
-      if (writes) for (const match of literal.text.matchAll(WRITE)) {
-        const table = match[2].toLowerCase();
-        if (file.startsWith(OWNERS[table]) || (table === 'artifacts' && allowed(file, importers))) continue;
-        violations.push(`  ${file}:${literal.line} ${match[1].replace(/\s+/g, ' ').toUpperCase()} ${table} — ${OWNERS[table] === IDENTITY_OWNER ? 'call the identity service (lib/platform services().identity)' : `call a ${OWNERS[table].replace(/^services\/app\//, '').replace(/\/$/, '')} function with this transaction`} instead`);
+      if (writes) for (const [operation, table] of writtenTables(literal.text)) {
+        const owner = OWNERS.get(table);
+        if ((owner && file.startsWith(owner)) || EXCEPTIONS[file]?.[operation]?.includes(table)) continue;
+        const action = owner === IDENTITY_OWNER ? 'call the identity service (lib/platform services().identity) instead'
+          : owner ? `call a ${owner.slice('services/app/'.length, -1)} function with this transaction instead`
+          : 'retained table has no product writer';
+        violations.push(`  ${file}:${literal.line} ${operation} ${table} — ${action}`);
       }
       if (locks) for (const table of lockedIdentityTables(literal.text))
         violations.push(`  ${file}:${literal.line} row lock on ${table} — identity rows are read, never locked, outside the identity module (an advisory lock serialises an app invariant)`);
     }
   }
   return violations;
+}
+
+/** Make schema growth and stale or duplicate policy entries fail validation. */
+function appCoverageViolations() {
+  const declared = new Set(TABLES.map(table => table.name));
+  const covered = new Set();
+  const problems = [];
+  for (const [table] of appOwners) {
+    if (!declared.has(table)) problems.push(`  ${table} no longer declared in the app schema`);
+    if (covered.has(table)) problems.push(`  ${table} has multiple app ownership entries`);
+    covered.add(table);
+  }
+  for (const table of declared) if (!covered.has(table)) problems.push(`  ${table} has no app ownership entry`);
+  return problems;
 }
 
 /** Every tracked or new, non-ignored source file under services/, scripts/ and server.ts. */
@@ -122,9 +189,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const at = args.indexOf('--root');
   const root = path.resolve(at < 0 ? '.' : args[at + 1]);
   const started = performance.now();
-  const violations = tableOwnershipViolations(scanSources(root));
+  const violations = [...appCoverageViolations(), ...tableOwnershipViolations(scanSources(root))];
   if (violations.length) {
-    console.error(`[table ownership] ${violations.length} write(s) to a table outside its owning module:\n${violations.join('\n')}`);
+    console.error(`[table ownership] ${violations.length} policy violation(s):\n${violations.join('\n')}`);
     process.exitCode = 1;
-  } else console.log(`[table ownership] artifact, region and identity tables are written only by their owners, and identity rows are locked only by theirs (${Math.round(performance.now() - started)} ms).`);
+  } else console.log(`[table ownership] ${OWNERS.size} app and identity tables checked (literal writes and identity locks) (${Math.round(performance.now() - started)} ms).`);
 }

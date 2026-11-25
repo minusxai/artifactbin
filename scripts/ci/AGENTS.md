@@ -1,9 +1,7 @@
 # CI
 
-The scripts behind the workflows: the required PR lane and its budget, the test lists, the timings that pack shards, merge
-admission, and the validate checks (`module-graph.mjs`, `check-ui-primitives.mjs`, `table-ownership.mjs`).
-The workflows themselves are `.github/workflows/*.yml`; job, runner and shard counts live there and in
-`test-timings.mjs`, never in prose.
+CI scripts own test selection, shard timings, merge admission and validation. Workflow files and
+`test-timings.mjs` specify job, runner and shard counts.
 
 ## Rules
 - The required check for PRs into `main` is `pr fast` (`.github/workflows/pr-fast.yml`). Aim under 40 s, warn at
@@ -21,6 +19,8 @@ The workflows themselves are `.github/workflows/*.yml`; job, runner and shard co
 - `ci.yml`, page-speed, credential-platform and node-timings run on main or by hand, never on automatic PRs.
   Never add an unbounded PR workflow or wait for full release checks before merging; a green `pr fast` is
   never tested-release evidence. The 40/60 policy holds in every repository.
+- When adding an app table, give it one writer in the table-ownership check. Document cross-module exceptions there
+  by file, operation and table, with the transaction that needs each exception.
 - A test's white-box import of another module is recorded in `module-graph.allowed-test-imports.json`, which
   only shrinks: shared resets and test seams belong in the harness.
 - Every post-merge failure on main gets a fast-lane guard: find why `pr fast` missed it and add a

@@ -1,6 +1,7 @@
 import {artifactQuotaLimit} from './quota-policy';
 import {createHash} from 'node:crypto';
 import {convertLegacyPage,editableRegions,LiveRegionRefusal} from '../live-regions';
+import type { ConnectionSummary } from '@artifactbin/contracts/connectors';
 import { isDeepStrictEqual } from 'node:util';
 import { libraryVersions } from '@/lib/libraries';
 import type {HtmlDatasetLink, HtmlDefaultConnectionLink, HtmlLiveDatasetLink, HtmlPageLink} from '@artifactbin/contracts/html-page';
@@ -12,7 +13,7 @@ import {assertOwnerPlacement,assertDestination,newArtifactDestination,permitsMem
 import { identityForUser, type AccessActor, type PublicationActor } from '@/lib/accounts';
 import { groupAdminSql } from '@/lib/groups';
 import type {ArtifactDestination} from '@artifactbin/contracts/groups';
-import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, sharingScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
+import { LIVE_ARTIFACT_SQL, SHARE_PREDICATE, groupMemberPredicate, editorScope, lockOrder, ownerPredicate, ownerScope, replaceNamedShares, sharingScope, writerFor, type ArtifactRow, type Scope } from '@/lib/artifact-access';
 import { headBumpSql } from './table';
 import type { DatasetPermissions } from '@artifactbin/contracts/dataset-permissions';
 import type { DocumentGraph } from '@artifactbin/contracts/document-update';
@@ -52,10 +53,11 @@ export type ArtifactSummary = Omit<ArtifactRow, 'source' | 'token_id' | 'actor_u
 /** A new live dataset's connection (lib/live-datasets): its fields without secrets, and the secrets sealed to the new ID. */
 export interface LiveConnectionInsert { config: Record<string, unknown>; seal: (datasetId: string) => string | null }
 /**
- * A live dataset's connection changed (lib/live-datasets, inside its locked transaction): the row shows the new summary
- * (`meta.connection`); the version (row revisions, which a connection has none of) does not move.
+ * Update the stored connection and its artifact summary in the caller's locked transaction. The connection
+ * revision moves to invalidate cached connections. The artifact version stays at its current value.
  */
-export async function setLiveDatasetSummary(tx: Queryable, id: string, summary: Record<string, unknown>): Promise<void> {
+export async function saveLiveDatasetConnection(tx: Queryable, id: string, config: Record<string, unknown>, sealed: string | null, summary: ConnectionSummary): Promise<void> {
+  await tx.query('UPDATE dataset_connections SET config = $2::jsonb, sealed = $3, revision = revision + 1, updated_at = now() WHERE dataset_id = $1', [id, JSON.stringify(config), sealed]);
   await tx.query(`UPDATE artifacts SET meta = jsonb_set(meta, '{connection}', $2::jsonb), updated_at = now() WHERE id = $1 AND format = 'dataset' AND meta ? 'connection'`, [id, JSON.stringify(summary)]);
 }
 
@@ -383,10 +385,7 @@ const groupStamp = (actor: AccessActor): string | null => actor.principalGroup?.
 export async function writeShares(tx:Queryable,id:string,shares:ShareEntry[],base:number):Promise<{shares:ShareEntry[];sharing_revision:number}>{
  const normalized=normalizeShares(shares);
  if(await sharesChange(tx,id,normalized)){
-  // Retained invitations keep their resolved account identity, even after an
-  // email change. Recreating them would transfer access to a reused address.
-  await tx.query('DELETE FROM artifact_shares WHERE artifact_id=$1 AND NOT (email=ANY($2::text[]))',[id,normalized.map(entry=>entry.email)]);
-  for(const entry of normalized)await tx.query('INSERT INTO artifact_shares (artifact_id,email,role) VALUES ($1,$2,$3) ON CONFLICT (artifact_id,email) DO UPDATE SET role=EXCLUDED.role',[id,entry.email,entry.role]);
+  await replaceNamedShares(tx,id,normalized);
   await tx.query('UPDATE artifacts SET sharing_revision=$2 WHERE id=$1',[id,base+1]);
  }
  const row=(await tx.query<{sharing_revision:number}>('SELECT sharing_revision FROM artifacts WHERE id=$1',[id])).rows[0];
