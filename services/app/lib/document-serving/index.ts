@@ -23,3 +23,4 @@ export { hostedBlocksManifestResponse, pinnedComponentResponse, pinnedHostRespon
 export { nativeDraftDocument, nativeDraftPolicy } from './native-html.server';
 export type { NativeDraftRender } from './native-html.server';
 export { nativeHtmlCoreResponse, nativeHtmlDocument, nativeHtmlModuleResponse, nativeHtmlSystemsResponse, nativeHtmlTitle } from './native-html.server';
+export { offlineCopy } from './offline-copy.server';

@@ -7,21 +7,29 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { storePolicy } from '@/__tests__/artifact-fixtures';
 import { JSDOM } from 'jsdom';
-import { request, setSession, useAppHarness } from './harness';
+import * as esbuild from 'esbuild';
+import { POST } from '@/app/api/artifacts/route';
+import { mintAccountToken, request, setSession, useAppHarness } from './harness';
 import { GET as download } from '@/app/a/[id]/download/route';
 import { fixture, params, publish, ROWS, type Person } from './page-sql-door-fixture';
 import { OFFLINE_SQL_NO_DATA, OFFLINE_SQL_NO_DATA_EVENT } from '@/lib/html-runtime/portable-chrome-contract';
 
-/** The export's data cap, lowered by one test to stand for rows past 16 MiB: the real read, a smaller limit. */
-const cap = vi.hoisted(() => ({ maxBytes: undefined as number | undefined }));
+/** Lower the SQL admission cap or supply admitted rows to exercise final HTML sizing. */
+const cap = vi.hoisted(() => ({ maxBytes: undefined as number | undefined, rows: undefined as string | undefined }));
 vi.mock('@/lib/dataset-access', async (actual) => {
   const real = await actual<typeof import('@/lib/dataset-access')>();
-  return { ...real, offlinePageSqlData: (...args: Parameters<typeof real.offlinePageSqlData>) => real.offlinePageSqlData(args[0], args[1], args[2], cap.maxBytes ?? args[3], args[4]) };
+  return { ...real, offlinePageSqlData: (...args: Parameters<typeof real.offlinePageSqlData>) => cap.rows === undefined ? real.offlinePageSqlData(args[0], args[1], args[2], cap.maxBytes ?? args[3], args[4])
+    : Promise.resolve({ tables: [{ schema: 'main', name: 'budget', columns: [{ name: 'text', type: 'string' }], rows: [{ text: cap.rows }] }] }) };
+});
+
+vi.mock('esbuild', async (actual) => {
+  const real = await actual<typeof esbuild>();
+  return { ...real, build: vi.fn(real.build) };
 });
 
 useAppHarness();
 beforeEach(() => setSession(null));
-afterEach(() => { vi.unstubAllGlobals(); cap.maxBytes = undefined; });
+afterEach(() => { vi.unstubAllGlobals(); cap.maxBytes = undefined; cap.rows = undefined; });
 
 const SECRET = 'zebra-secret-7731';
 const PAGE_SQL = 'select name, salary from staff order by name';
@@ -41,7 +49,7 @@ document.querySelector('#staff tbody').innerHTML=rows.map(r=>'<tr><td>'+r.name+'
   return { ...f, page: page.body.id };
 }
 
-async function exported(page: string, who: Person | null) {
+async function exported(page: string, who: Pick<Person, 'token'> | null) {
   const response = await download(request(`/a/${page}/download`, who ? { token: who.token } : {}), params(page));
   expect(response.status).toBe(200);
   return response.text();
@@ -141,4 +149,57 @@ it('a copy whose rows are over the cap carries none, and its sql and its local c
   await expect(Promise.resolve(runtime.sql([PAGE_SQL] as unknown as TemplateStringsArray))).rejects.toMatchObject({ code: 'unavailable', message: OFFLINE_SQL_NO_DATA });
   // The copy's local controls show the same sentence (lib/html-runtime portable-session).
   expect(dispatched).toHaveBeenCalledWith(expect.objectContaining({ type: OFFLINE_SQL_NO_DATA_EVENT }));
+});
+
+it('keeps the exact UTF-8 attachment ceiling and falls back to addresses before dropping SQL', async () => {
+  const owner = await mintAccountToken('offline-size-ladder');
+  const create = await POST(request('/api/artifacts', {
+    method: 'POST', token: owner.token, headers: { 'Idempotency-Key': 'offline_size_ladder_01' },
+    json: {
+      visibility: 'private',
+      html: '<link rel="stylesheet" href="./theme.css"><a id="paper" href="./paper.pdf">Résumé</a>',
+      publicationBundle: { entryPath: 'index.html', files: [
+        { path: 'theme.css', contentType: 'text/css', base64: Buffer.from('a{color:green}').toString('base64') },
+        { path: 'paper.pdf', contentType: 'application/pdf', base64: Buffer.from('%PDF-1.4\n%' + 'x'.repeat(1024) + '\n%%EOF\n').toString('base64') },
+      ] },
+    },
+  }));
+  expect(create.status).toBe(201);
+  const { id } = await create.json() as { id: string };
+  const builds = vi.mocked(esbuild.build);
+  const cssBuilds = () => builds.mock.calls.filter(([options]) =>
+    options.stdin?.loader === 'css' && options.plugins?.some(plugin => plugin.name === 'admitted-offline-only'),
+  ).length;
+  builds.mockClear();
+  cap.rows = '';
+  const small = await exported(id, owner);
+  expect(small).toContain('id="paper" href="data:application/pdf;base64,');
+  expect(cssBuilds()).toBe(1);
+
+  // '<' adds six bytes once escaped in the SQL block; 'é' adds two UTF-8 bytes.
+  const ceiling = 25 * 1024 * 1024;
+  const remaining = ceiling - Buffer.byteLength(small) - 2;
+  cap.rows = '<'.repeat(Math.floor(remaining / 6)) + 'a'.repeat(remaining % 6) + 'é';
+  builds.mockClear();
+  const at = await exported(id, owner);
+  expect(Buffer.byteLength(at)).toBe(ceiling);
+  expect(at).toContain('id="paper" href="data:application/pdf;base64,');
+  expect(cssBuilds()).toBe(1);
+
+  cap.rows += 'a';
+  builds.mockClear();
+  const fallback = await exported(id, owner);
+  expect(fallback).toContain('id="paper" href="http');
+  expect(fallback).toContain('data-af="offline-sql"');
+  expect(fallback).toContain('href="data:text/css;base64,');
+  expect(Buffer.byteLength(fallback)).toBeLessThanOrEqual(ceiling);
+  expect(cssBuilds()).toBe(1);
+
+  cap.rows += 'a'.repeat(ceiling - Buffer.byteLength(fallback) + 1);
+  builds.mockClear();
+  const withoutSql = await exported(id, owner);
+  expect(withoutSql).toContain('id="paper" href="http');
+  expect(withoutSql).not.toContain('data-af="offline-data">');
+  expect(withoutSql).not.toContain('data-af="offline-sql">');
+  expect(cssBuilds()).toBe(1);
 });

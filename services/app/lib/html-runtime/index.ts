@@ -17,6 +17,10 @@ export type { StatePort, RemotePort } from './apollo/apollo-contracts';
 
 /** Native HTML only: no JSX compilation, component evaluation, or author code execution. */
 export function assembleHtmlPage(input: HtmlAssemblyInput): string {
+  return assemble(input);
+}
+
+function assemble(input: HtmlAssemblyInput, keepOfflineSql?: (html: string) => boolean): string {
   const document = parse(input.html);
   const html = document.childNodes.find((node): node is DefaultTreeAdapterMap['element'] => node.nodeName === 'html');
   const head = html?.childNodes.find((node): node is DefaultTreeAdapterMap['element'] => node.nodeName === 'head');
@@ -83,12 +87,11 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
   // A page binding live cells gets the cell library too: offline it is read-only (the reader's cell port has no parent).
   const collab=input.offline&&input.collab&&/["']@afbin\/collab["']/.test(input.html)?`<script type="application/json" data-af="collab">${JSON.stringify(input.collab).replace(/</g,'\\u003c')}</script>`:'';
   const engine=input.offline&&input.portableEngine?`<script type="application/json" data-af="portable-engine">${JSON.stringify(input.portableEngine).replace(/</g,'\\u003c')}</script>`:'';
-  // The rows an offline copy's `sql` reads, and the engine that answers it (./offline-sql): both or neither, export only.
   // A draft carries its tables alone: its core maps the engine to the hosted module (build.server).
-  const sqlData=!input.offline&&config.draft===true&&input.offlineData?.tables.length?`<script type="application/json" data-af="offline-data">${JSON.stringify(input.offlineData).replace(/</g,'\\u003c')}</script>`
-   :input.offline&&input.offlineSql&&input.offlineData?.tables.length?`<script type="application/json" data-af="offline-data">${JSON.stringify(input.offlineData).replace(/</g,'\\u003c')}</script><script type="application/json" data-af="offline-sql">${JSON.stringify(input.offlineSql).replace(/</g,'\\u003c')}</script>`:'';
+  const draftData=!input.offline&&config.draft===true&&input.offlineData?.tables.length
+    ? `<script type="application/json" data-af="offline-data">${JSON.stringify(input.offlineData).replace(/</g,'\\u003c')}</script>` : '';
   const stateModule=input.offline&&input.state?`<script type="application/json" data-af="state-module">${JSON.stringify(input.state).replace(/</g,'\\u003c')}</script>`:'';
-  const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${canonical}${portable}${stateModule}${portableReader}${chrome}${engine}${collab}${sqlData}<script data-af="core">${safeCore}</script>`);
+  const boot = parseFragment(`<script type="application/json" data-af="runtime">${json}</script>${canonical}${portable}${stateModule}${portableReader}${chrome}${engine}${collab}${draftData}<script data-af="core">${safeCore}</script>`);
   for (const node of boot.childNodes) {
     node.parentNode = head;
     if ('attrs' in node && node.attrs.some(attr=>attr.name==='data-af'&&attr.value==='core') && input.platformScriptNonce) node.attrs.push({name:'nonce',value:input.platformScriptNonce});
@@ -115,11 +118,35 @@ export function assembleHtmlPage(input: HtmlAssemblyInput): string {
     const charset=head.childNodes.find(node=>'attrs'in node&&node.nodeName==='meta'&&node.attrs.some(attr=>attr.name==='charset'))!;
     head.childNodes=head.childNodes.filter(node=>node!==charset);head.childNodes.unshift(charset);
   }
+  // Offline SQL is inert, so it does not enter the executable admission or the portable source digest.
+  // Attach its escaped JSON directly as text; there is no need to parse potentially megabytes of rows and engine.
+  const offlineSqlNodes: DefaultTreeAdapterMap['childNode'][] = input.offline && input.offlineSql && input.offlineData?.tables.length
+    ? [inertJsonScript('offline-data', input.offlineData, head), inertJsonScript('offline-sql', input.offlineSql, head)] : [];
+  if (offlineSqlNodes.length) {
+    const core = boot.childNodes.at(-1)!;
+    head.childNodes.splice(head.childNodes.indexOf(core), 0, ...offlineSqlNodes);
+  }
   input.decorate?.(document);
-  return serialize(document);
+  const rendered = serialize(document);
+  if (offlineSqlNodes.length && keepOfflineSql && !keepOfflineSql(rendered)) {
+    head.childNodes = head.childNodes.filter(node => !offlineSqlNodes.includes(node));
+    return serialize(document);
+  }
+  return rendered;
 }
-/** Downloads use the same native renderer, with no platform origin or remote capability. */
-export const downloadableHtml = (input: HtmlAssemblyInput): string => assembleHtmlPage({ ...input, offline: true });
+
+function inertJsonScript(name: string, value: unknown, parentNode: DefaultTreeAdapterMap['element']): DefaultTreeAdapterMap['element'] {
+  const script = parseFragment('<script type="application/json"></script>').childNodes[0] as DefaultTreeAdapterMap['element'];
+  script.attrs.push({ name: 'data-af', value: name });
+  script.parentNode = parentNode;
+  script.childNodes = [{ nodeName: '#text', value: JSON.stringify(value).replace(/</g, '\\u003c'), parentNode: script }];
+  return script;
+}
+/** Downloads use the same native renderer, with no platform origin or remote capability.
+ * The last size fallback can drop the two SQL blocks from the measured copy without reassembling the page.
+ */
+export const downloadableHtml = (input: HtmlAssemblyInput, keepOfflineSql?: (html: string) => boolean): string =>
+  assemble({ ...input, offline: true }, keepOfflineSql);
 export { LIVE_VERSION_HEADER } from './live-morph-contract';
 export type {
   PortableChromeHandle, PortableChromeIdentity, PortableChromeOptions, PortableChromeUpdate, PortablePreviewStatus, SavePortableOptions,

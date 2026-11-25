@@ -59,7 +59,7 @@ const htmlAssets=buildHtmlAssets;
 function htmlCore(): Promise<string> {
   return htmlAssets().then(assets=>assets.core);
 }
-export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<NativeHtmlDocument> {
+export async function nativeHtmlDocument(input: NativeHtmlRender, keepOfflineSql?: (html: string) => boolean): Promise<NativeHtmlDocument> {
   // A stored link of a removed kind (a page function's) is no link.
   const links=((input.row.meta as {htmlLinks?:readonly HtmlPageLink[]}).htmlLinks??[]).filter(link=>(link as {kind:string}).kind!=='backend');
   const config:HtmlRuntimeConfig={...(hasImportedSourceObservation(input.row)?{annotationObservation:'imported-source-v1' as const}:{}),pageId:input.row.id,revision:String(input.row.version),...(input.live!==undefined?{live:input.live}:{}),backends:links.map(link=>link.name),...(links.some(link=>link.kind==='dataset')?{datasets:links.flatMap(link=>link.kind==='dataset'?[link.name]:[])}:{}),bindings:Object.fromEntries(links.flatMap(link=>link.kind==='dataset'?[[link.name,link.datasetId]]:[])),...(input.appOrigin?{appOrigin:new URL(input.appOrigin).origin}:{}),...(input.domainReads&&!input.offline?{domainReads:true as const}:{}),...(input.offline?{}:{libraries:libraryImports((input.row.meta as {htmlLibraries?:unknown}).htmlLibraries)})};
@@ -81,7 +81,7 @@ export async function nativeHtmlDocument(input: NativeHtmlRender): Promise<Nativ
     htmlCore(), input.presentation,
   ]);
   const assembly={decorate,platformScriptNonce:input.platformScriptNonce??randomUUID().replaceAll('-',''),...(input.unsavedIds?.size?{unsavedNodeIds:input.unsavedIds}:{}),portable,html:nativeCodeHtml(rendered),config,core,systemsHref:PLATFORM_STYLES_PATH,designSystem:input.designSystem??null,...(input.offline?{apollo:(await htmlAssets()).apollo,reader:(await htmlAssets()).reader,chrome:(await htmlAssets()).chrome,portableEngine:(await htmlAssets()).portableEngine,collab:(await htmlAssets()).collab,state:(await htmlAssets()).state,...(input.offlineData?.tables.length?{offlineData:input.offlineData,offlineSql:(await htmlAssets()).offlineSql}:{})}:{})};
-  return {html:input.offline?downloadableHtml(assembly):assembleHtmlPage(assembly),config};
+  return {html:input.offline?downloadableHtml(assembly, keepOfflineSql):assembleHtmlPage(assembly),config};
 }
 /** A draft's page (lib/page-drafts): the reader's own source, never stored, and the tables its linked CSV files are. */
 export interface NativeDraftRender { label: string; html: string; appOrigin: string; datasets: readonly string[]; tables: NonNullable<HtmlAssemblyInput['offlineData']>['tables']; connections?: readonly string[]; liveSql?: boolean }
