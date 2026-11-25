@@ -552,13 +552,6 @@ body {
 .comment-agents-manage:hover { color:var(--color-fg); text-decoration:underline; text-underline-offset:3px; }
 .comment-agents-manage:focus-visible { outline:2px solid var(--color-accent); outline-offset:3px; border-radius:2px; }
 
-.comment-agent-status { display:flex; align-items:center; gap:6px; min-width:0; white-space:nowrap; font-family:var(--font-sans); }
-.comment-agent-status-name { flex:0 1 auto; min-width:0; max-width:48%; overflow:hidden; text-overflow:ellipsis; }
-.comment-agent-status-label { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }
-.comment-agent-spinner { width:11px; height:11px; flex:none; border:1.5px solid var(--color-edge-bright); border-top-color:var(--color-accent); border-radius:50%; animation:comment-agent-spin 1s linear infinite; }
-@keyframes comment-agent-spin { to { transform:rotate(360deg); } }
-@media (prefers-reduced-motion:reduce) { .comment-agent-spinner { animation:none; } }
-
 .comment-rich-editor.tiptap :is(ul,ol) { padding-left:28px; }
 .comment-rich-editor.tiptap li { margin-block: 4px; }
 .comment-rich-editor.tiptap li > p { margin: 0; }

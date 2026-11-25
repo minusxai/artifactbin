@@ -1,13 +1,5 @@
 import {sessionMentions} from './session-mentions';
-import type { RemoteColor, RemoteActivity } from '@artifactbin/contracts/remote';
 
-type RemoteWorkPhase = 'queued' | 'dispatching' | 'superseded' | 'delivered' | 'acknowledged' | 'completed' | 'cancelled' | 'failed' | 'blocked' | 'uncertain' | 'unavailable';
-export interface RemoteWork {
- id:string; sessionId:string; artifactId:string; threadId:string; commentId:string;
- name:string; color:RemoteColor; phase:RemoteWorkPhase; updatedAt:string;
- reason?:'queue_full'|'unauthorized'|'interrupted';
- activity?:RemoteActivity;connection?:'online'|'offline'|'stopped';
-}
 /** The latest human explicit targets are defaults, never inferred from an agent reply. */
 export function replyMentionPrefix(thread:ReadonlyArray<{body:string;author:{kind:string}}>):string{
  for(let i=thread.length-1;i>=0;i--){const c=thread[i]!;if(c.author.kind!=='human')continue;
@@ -17,24 +9,3 @@ export function replyMentionPrefix(thread:ReadonlyArray<{body:string;author:{kin
  return '';
 }
 export function hasReplyText(body:string):boolean{let text=body;for(const match of sessionMentions(body))text=text.replace(match[0],'');return !!text.trim();}
-
-export function remoteWorkLabel(work:RemoteWork):string{
- if(work.phase==='cancelled')return 'Cancelled';
- if(work.reason==='interrupted')return 'Interrupted · check prior changes, then mention again';
- if(work.reason==='queue_full')return 'Queue full · mention again after pending work finishes';
- if(work.reason==='unauthorized')return 'Unavailable · mention one of your agents';
- const phase=({cancelled:'Cancelled',superseded:'Follow-up received',dispatching:'Sending to agent',queued:'Queued',delivered:'Sent · awaiting acknowledgment…',acknowledged:'Working',completed:'Answered',failed:'Execution failed · retry by mentioning again',blocked:'Needs your input',uncertain:'Delivery uncertain · check terminal',unavailable:'Agent unavailable'})[work.phase];
- if(work.connection==='stopped')return phase+' · stopped';
- if(work.activity==='queued'&&(work.phase==='queued'||work.phase==='dispatching'))return 'Waiting for capacity';
- if(work.connection==='offline')return phase+' · offline';
- if(work.phase==='queued'&&work.activity==='unknown')return phase+' · readiness unknown, check terminal';
- if(work.phase==='queued'&&work.activity==='starting')return phase+' · loading context';
- return phase;
-}
-
-/** Pending delivery or execution, excluding states that need user intervention. */
-export function remoteWorkActive(work: RemoteWork): boolean {
- return work.connection !== 'offline' && work.connection !== 'stopped'
-  && work.reason !== 'queue_full' && work.reason !== 'unauthorized'
-  && ['queued','dispatching','delivered','acknowledged'].includes(work.phase);
-}

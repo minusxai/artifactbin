@@ -6,7 +6,6 @@ import { reactionScope, annotationScope, effectiveRole, type Scope } from '@/lib
 import {consumeCommentImage,commentImagesFor} from './comment-images';
 import type {CommentImageWire} from '@artifactbin/contracts/comment-image';
 import type { RemoteColor } from '@artifactbin/contracts/remote';
-import type { RemoteWork } from './remote-reply';
 import { type AnnotationAuthor, type AnnotationCommentWire, type CommentReactionInput, type CommentReactionSummary, type CommentReactor, COMMENT_REACTORS_MAX } from '@artifactbin/contracts/annotation-comment';
 import type { EventOrigin } from '@artifactbin/contracts/events';
 import { annotationsChannel } from '@artifactbin/contracts/live-channels';
@@ -50,7 +49,6 @@ export interface AnnotationWire {
   /** Set only on an answer to reply+resolve/reopen whose revision was stale: the reply landed, the state change did not. */
   status_conflict?: true;
   image?: CommentImageWire;
-  remote_work?:RemoteWork[];
   id: string;
   status: 'open' | 'resolved';
   /** null exactly when `orphaned` — the anchor names nothing in the CURRENT version. */
