@@ -7,7 +7,7 @@ import { artifactSummaryToWire } from '@/lib/artifact-wire';
 import { getDb, measureQueries, EVENTS_SCHEMA } from '@/lib/platform';
 import { accountWorkspaceFor, accountWorkspaceInsightsFor, listOwnedArtifacts } from '@/lib/workspace';
 import { ensureEventsSchema } from '@artifactbin/events/local';
-import { mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
+import { catchUpLoggedViews, mintAccountToken, request, useAppHarness } from '@/__tests__/harness';
 import { seedArtifacts } from '@/__tests__/rows';
 
 useAppHarness();
@@ -47,6 +47,7 @@ async function seed(docs: number, tag = 'vol') {
     [docs],
   );
   await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id) VALUES ('${tag}ds','app','viewed','artifact','${tag}ds1','x'),('${tag}export','app','exported','artifact','${tag}001','y')`);
+  await catchUpLoggedViews();
   return user;
 }
 

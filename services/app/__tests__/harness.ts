@@ -30,7 +30,7 @@ import { AUTH_SECRET } from '@/lib/platform/config';
 import { getDb, recycleDbSession, resetDb, type Db, type Queryable } from '@/lib/platform/db';
 import { syncIdentitySettings } from '@/lib/platform/testing';
 import { resetExportRenderer } from '@/lib/export';
-import { flushViews, settleViewTotals } from '@/lib/analytics';
+import { flushViews, settleViewTotals, viewTotalsFor } from '@/lib/analytics';
 import { resetRenderCache } from '@/lib/document-serving/render-cache';
 import { resetLiveSubscriptions } from '@/lib/publish/realtime/live';
 import { SCHEMA_STATEMENTS } from '@/lib/platform/schema';
@@ -441,6 +441,16 @@ export async function setDatasetPolicy(actor: AccessActor, id: string, policy: u
  * EVERY STATEMENT THE DATABASE SEES while `work` runs, for query-budget tests: their text (inside transactions
  * too), how many transactions `work` opened, and the statement count `measureQueries` reports.
  */
+/**
+ * Views a test wrote straight into the log have no fold after them, like history another process ingested: reading
+ * them schedules the catch-up fold (lib/analytics view-totals), and this awaits it, so the next read counts them.
+ */
+export async function catchUpLoggedViews(): Promise<void> {
+  const logged = await (await getDb()).query<{ id: string }>(`SELECT DISTINCT object_id AS id FROM ${EVENTS_SCHEMA}.events WHERE verb='viewed' AND object_id IS NOT NULL`);
+  await viewTotalsFor(logged.rows.map(row => row.id));
+  await settleViewTotals();
+}
+
 export async function recordStatements<T>(work: () => Promise<T>): Promise<{ value: T; sql: string[]; transactions: number; count: number }> {
   const db = await getDb();
   // Restored exactly as found (an own property only if there was one), so the harness's reuse check sees no change.

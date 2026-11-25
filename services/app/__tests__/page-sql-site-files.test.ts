@@ -3,7 +3,7 @@ import {ensureEventsSchema} from '@artifactbin/events/local';
 import {EVENTS_SCHEMA} from '@/lib/platform';
 import {link,unlink} from '@/lib/social';
 import {ownerHostSqlRead,type SiteFilesScope} from '@/lib/page-doors';
-import {request,useAppHarness} from './harness';
+import {catchUpLoggedViews,request,useAppHarness} from './harness';
 import {fixture,publish,sql} from './page-sql-door-fixture';
 import {seedArtifacts,setArtifact} from './rows';
 
@@ -23,6 +23,7 @@ it('joins the public subtree with guest-visible dataset rows and counts live lik
  await ensureEventsSchema(db,EVENTS_SCHEMA);
  await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id,at,source,verb,object_kind,object_id,subject_kind,subject_id)
  SELECT 'event'||n,'2026-01-01'::timestamptz,'app','viewed','artifact','article','visitor',v FROM (VALUES (1,'a'),(2,'a'),(3,'b')) x(n,v)`);
+ await catchUpLoggedViews();
  expect((await read('select id,parent_id,likes,views,url,note from _files cross join notes order by id')).rows).toEqual([
   {id:'article',parent_id:'nested',likes:1,views:2,url:'https://example.org/article',note:'hello'},
   {id:'assetfile',parent_id:null,likes:0,views:0,url:expect.stringMatching(/\/@publisher\/assetfile/),note:'hello'},

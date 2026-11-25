@@ -15,7 +15,7 @@ import { observedRequest } from '@/__tests__/conditional-request';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { EVENTS_SCHEMA } from '@/lib/platform';
 import { overrideRequestHeaders } from '@/lib/platform/testing';
-import { useAppHarness, request, useSessionUser } from '@/__tests__/harness';
+import { catchUpLoggedViews, useAppHarness, request, useSessionUser } from '@/__tests__/harness';
 import { DELETE as deleteArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { DELETE as deleteMyArtifactRoute } from '@/app/api/my/artifacts/[id]/route';
 import { GET as listMyArtifactsRoute } from '@/app/api/my/artifacts/route';
@@ -189,6 +189,7 @@ describe('per-artifact totals', () => {
        ('x1', 'app', 'exported', 'artifact', $1, now())`,
       [a.id, b.id],
     );
+    await catchUpLoggedViews();
 
     const listed = await listArtifactsByUser(user.id);
     expect(listed.find((r) => r.id === a.id)?.views).toBe(3); // exports don't count

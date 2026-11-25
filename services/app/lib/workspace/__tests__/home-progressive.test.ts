@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { GET as assetsPage } from '@/app/api/page/assets/route';
 import { GET } from '@/app/api/page/home/route';
 import { createUser } from '@/lib/accounts/testing';
-import { request, useAppHarness } from '@/__tests__/harness';
+import { catchUpLoggedViews, request, useAppHarness } from '@/__tests__/harness';
 import * as feed from '@/lib/workspace/analytics';
 import { accountWorkspaceInsightsFor, accountWorkspaceFor } from '@/lib/workspace';
 import { mintAccountToken as mintToken } from '@/__tests__/harness';
@@ -67,6 +67,7 @@ it('deferred lifetime counts preserve distinct visitors, exclude trash and remai
   await setArtifact(db, 'trash1', { deleted_at: { sql: 'now()' } });
   await ensureEventsSchema(db, EVENTS_SCHEMA);
   await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id) SELECT n::text,'app',verb,'artifact',artifact,visitor FROM (VALUES (1,'viewed','cnt123','same'),(2,'viewed','cnt123','same'),(3,'viewed','cnt123','different'),(4,'viewed','cnt123',NULL),(5,'edited','cnt123','ignored'),(6,'viewed','trash1','hidden')) v(n,verb,artifact,visitor)`);
+  await catchUpLoggedViews();
   const insights = await accountWorkspaceInsightsFor(user.id);
   expect(insights.views).toEqual({ cnt123: 3 });
   const full = await accountWorkspaceFor(user.id, user.email);
@@ -88,6 +89,7 @@ it('separates the 1000-document shelf, aggregate totals and paginated assets', a
   await setArtifact(db, ['doc1005', 'asset0205'], { deleted_at: { sql: 'now()' } });
   await ensureEventsSchema(db, EVENTS_SCHEMA);
   await db.query(`INSERT INTO ${EVENTS_SCHEMA}.events (id,source,verb,object_kind,object_id,subject_id) SELECT n::text,'app','viewed','artifact',artifact,'v' FROM (VALUES (1,'doc1004'),(2,'doc1004'),(3,'doc1'),(4,'doc1005'),(5,'asset0001')) v(n,artifact)`);
+  await catchUpLoggedViews();
   const actor = { credential: 'session' as const, userId: user.id, email: user.email!, emailVerified: true };
   const core = await (await GET(request('/api/page/home?part=core', { actor }))).json();
   expect(core.artifacts).toHaveLength(1000);
