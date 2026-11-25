@@ -38,10 +38,10 @@ import { acceptGroupInvitations } from '../groups';
 import { pagesRequestOf } from '../http';
 import { identifyClient, ARTIFACTBIN_AGENT_HEADER, type Harness } from '../accounts';
 import { currentRequest } from '../platform';
-import { DuplicateProfileEmail, NO_IDENTITY, answeredOnce, liveGroupSignIn, rememberTokenClient, resolveToken, resolveTokenById, syncProfile, touchToken, type GroupPrincipal, type RequestIdentity } from '@/lib/accounts';
+import { DuplicateProfileEmail, NO_IDENTITY, answeredOnce, liveGroupSignIn, recordBearerUse, resolveToken, resolveTokenById, syncProfile, touchToken, type GroupPrincipal, type RequestIdentity } from '@/lib/accounts';
 import { canAuthenticateUser } from '../user-kinds';
 import { hasDocumentEditorAccess } from './document-editor';
-import { hostedRequestRefusal } from './request-authority';
+import { hostedRequestAdmission } from './request-authority';
 import { auth } from './session';
 
 /**
@@ -124,7 +124,8 @@ async function bearerIdentity(request: Request, presented: string, door: 'token'
   // A trusted identity owner refusal must survive app-owned token resolution.
   const claims = actorOf(request);
   if(claims?.credential==='none')return door==='token'?{kind:'bearer-invalid'}:nobody();
-  const token = await resolveToken(presented);
+  const lookup = { revalidate: !options.effects };
+  const token = await resolveToken(presented, lookup);
   if (!token) return door === 'token' ? { kind: 'bearer-invalid' } : nobody();
   if (token.group) {
     // Only with the identity host's own actor for this very sign-in: a raw group bearer on a direct app listener is no one.
@@ -145,7 +146,7 @@ async function bearerIdentity(request: Request, presented: string, door: 'token'
     email: matched ? claims.email ?? null : null,
     emailVerified: matched ? claims.emailVerified === true : null,
   }, 'bearer');
-  const refused = await hostedRequestRefusal(token.userId, token.id, request, door === 'token' && request.headers.get(BROWSER_SESSION_HEADER) === '1');
+  const { refusal: refused, touchDue } = await hostedRequestAdmission(token.userId, token.id, lookup);
   if (refused) return door === 'token' ? { kind: 'refused', response: refused } : nobody();
   let clientHarness = token.clientHarness;
   if (options.effects) {
@@ -155,13 +156,11 @@ async function bearerIdentity(request: Request, presented: string, door: 'token'
     const dryRun = door === 'token' && options.dryRun === true;
     if (!dryRun) await syncBearerProfile(identity);
     if (door === 'request' || !(dryRun || options.readOnly)) {
-      await touchToken(token.id);
       const declared = door === 'token' ? identifyClient({ agentHeader: request.headers.get(ARTIFACTBIN_AGENT_HEADER) }) : null;
-      if (declared?.source === 'agent-header') {
-        await rememberTokenClient(token.id, declared.harness);
-        // Effective on this call as well as on later stateless ones.
-        clientHarness = declared.harness;
-      }
+      const declaredHarness = declared?.source === 'agent-header' ? declared.harness : null;
+      await recordBearerUse(token.id, touchDue, declaredHarness);
+      // A declaration is effective on this call as well as on later stateless ones.
+      clientHarness = declaredHarness ?? clientHarness;
     }
   }
   return { kind: 'identity', identity, clientHarness };
@@ -247,7 +246,7 @@ async function attachedIdentity(request: Request, effects: boolean): Promise<Ide
     await syncProfile({ userId, email: identity.email ?? undefined });
     if (identity.emailVerified && identity.email) await acceptGroupInvitations(userId, identity.email);
   }
-  if (await hostedRequestRefusal(userId, tokenId, request, browserSession || wire.credential === 'agent-cookie')) return nobody();
+  if ((await hostedRequestAdmission(userId, tokenId, { revalidate: !effects })).refusal) return nobody();
   if (effects && tokenId && (wire.credential === 'bearer' || wire.credential === 'agent-cookie')) await touchToken(tokenId);
   return { kind: 'identity', identity, clientHarness: null };
 }

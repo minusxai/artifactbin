@@ -20,7 +20,7 @@ export { DuplicateProfileEmail, confirmWelcome, syncProfile, welcomePending } fr
 export { canUseDeploymentIdentity } from './deployment-identity';
 
 /** Tokens: minting, lookup and the per-request credential memo. */
-export { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, answeredOnce, ensureUserToken, hostedCredentialDescriptor, listTokensByUser, liveGroupSignIn, mintToken, rememberTokenClient, resolveToken, resolveTokenById, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from './tokens';
+export { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, answeredOnce, ensureUserToken, hostedCredentialDescriptor, listTokensByUser, liveGroupSignIn, mintToken, recordBearerUse, resolveToken, resolveTokenById, revokeToken, sourcedTokenName, tokenStatus, touchToken, withAccountToken } from './tokens';
 export { revokeUserToken } from './users';
 export { hasAdminCredential } from './admin-auth';
 

@@ -10,7 +10,10 @@ export type HostedOperationAuthorization =
  * and transcript contents cannot promote a credential into request authority. */
 export async function hostedAuthorization(owner:string|null|undefined,tokenId:string|null|undefined,_name:string,_input:unknown):Promise<HostedOperationAuthorization>{
  if(!owner||!tokenId)return {kind:'ordinary'};
- const credential=await hostedCredentialDescriptor(owner,tokenId);
+ return credentialAuthorization(await hostedCredentialDescriptor(owner,tokenId));
+}
+
+function credentialAuthorization(credential:{scoped:boolean}|null):HostedOperationAuthorization{
  if(!credential)return {kind:'denied',code:'agent_credential_invalid',message:'The request credential is no longer available.'};
  if(!credential.scoped)return {kind:'ordinary'};
  return {kind:'denied',code:'agent_authority_unavailable',message:'Request authority is unavailable.'};
@@ -21,7 +24,9 @@ export function hostedRefusal(decision:HostedOperationAuthorization):Response|nu
  if(decision.kind==='deferred')return Response.json(decision.body,{status:202});
  return null;
 }
-export async function hostedRequestRefusal(owner:string|null|undefined,tokenId:string|null|undefined,request:Request,browser=false):Promise<Response|null>{
- return hostedRefusal(await hostedAuthorization(owner,tokenId,browser?'browser_request':'http_request',{method:request.method,path:new URL(request.url).pathname}));
+export async function hostedRequestAdmission(owner:string|null,tokenId:string|null,{revalidate}: {revalidate:boolean}):Promise<{refusal:Response|null;touchDue?:boolean}>{
+ if(!owner||!tokenId)return {refusal:null};
+ const credential=await hostedCredentialDescriptor(owner,tokenId,{revalidate});
+ return {refusal:hostedRefusal(credentialAuthorization(credential)),touchDue:credential?.touchDue};
 }
 export async function hostedOperationCompleted(_owner:string|null|undefined,_tokenId:string|null|undefined,_name:string,_input:unknown,_response:Response):Promise<void>{}

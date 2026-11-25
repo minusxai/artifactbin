@@ -52,8 +52,8 @@ export const LIVE_TOKEN_SQL = liveTokenSql();
 /**
  * WHAT ONE REQUEST HAS ALREADY LEARNED ABOUT ITS CREDENTIAL. The bearer door asks "is this token live?"
  * and "is its hosted authority scoped?" from several places on the way to a handler (the route wrapper,
- * the actor resolvers, `runOperation`), each a round trip to the same row. Within a request they cannot
- * disagree, so the first answer is kept for that request and no longer.
+ * the actor resolvers, `runOperation`). These consumers share one admission's answers. A new authorization
+ * decision such as the page verifier bypasses those answers entirely.
  *
  * Held per `Request` object (the server runs every handler inside `runWithRequest`), so it dies with the
  * request: NOTHING here outlives one request or is visible to another, which is what keeps revocation
@@ -202,10 +202,10 @@ interface ResolvedToken {
 }
 
 /** Resolve a presented plaintext token, or null (unknown OR revoked — same answer). */
-export async function resolveToken(presented: string): Promise<ResolvedToken | null> {
+export async function resolveToken(presented: string, { revalidate = false } = {}): Promise<ResolvedToken | null> {
   if (!TOKEN_RE.test(presented)) return null;
   const hash = sha256(presented);
-  return answeredOnce(`token:${hash}`, () => lookUpToken(hash));
+  return revalidate ? lookUpToken(hash) : answeredOnce(`token:${hash}`, () => lookUpToken(hash));
 }
 /** The hash is a secret column only the identity module reads: it answers the live row, this decides admission. */
 async function lookUpToken(hash: string): Promise<ResolvedToken | null> {
@@ -216,12 +216,13 @@ async function lookUpToken(hash: string): Promise<ResolvedToken | null> {
   return row && await canUseDeploymentIdentity(row.userId,db) && await canAuthenticateUser(row.userId, db) ? { id: row.id, userId: row.userId, clientHarness: row.clientHarness as Harness | null, ...(row.audience?{audience:row.audience}:{}) } : null;
 }
 
-/** Remember a declared/observed agent harness for attribution on later stateless calls. */
-export async function rememberTokenClient(id: string, harness: Harness): Promise<void> {
-  // An annotation's byline, never an authorization input, so the caller must
-  // not fail over it.
-  await services().identity.setTokenHarness({ id, harness });
-  forgetRequestCredentials();
+/** Attribute an admitted bearer using the usage sample read with its credential descriptor. */
+export async function recordBearerUse(id: string, touchDue: boolean | undefined, declaredHarness: Harness | null): Promise<void> {
+  await stampTokenUse(id, touchDue);
+  if (declaredHarness) {
+    await services().identity.setTokenHarness({ id, harness: declaredHarness });
+    forgetRequestCredentials();
+  }
 }
 
 /**
@@ -268,12 +269,19 @@ export async function revokeToken(id: string): Promise<boolean> {
  * and the actor the proxy attaches (the proxy's reader is SELECT-only and cannot stamp).
  */
 export const TOUCH_INTERVAL_MS = 60 * 1000;
-export async function touchToken(id: string): Promise<void> {
+const TOKEN_TOUCH_DUE_SQL = "last_used_at IS NULL OR last_used_at < now() - interval '60 seconds'";
+
+export function touchToken(id: string): Promise<void> {
+  return stampTokenUse(id);
+}
+
+async function stampTokenUse(id: string, sampledDue?: boolean): Promise<void> {
   try {
-    // The sample is read here first (the tokens view's last_used_at), so the identity module (an HTTP hop with an
-    // auth host) is asked at most once a minute per token, not on every request.
-    const due = (await (await getDb()).query(
-      "SELECT 1 FROM tokens WHERE id = $1 AND (last_used_at IS NULL OR last_used_at < now() - interval '60 seconds')", [id])).rows.length > 0;
+    // An explicit bearer already sampled last_used_at with its descriptor. Other credential paths sample here
+    // to avoid an identity-service call on each request.
+    const due = sampledDue ?? (await (await getDb()).query(
+      `SELECT 1 FROM tokens WHERE id = $1 AND (${TOKEN_TOUCH_DUE_SQL})`, [id])).rows.length > 0;
+    // The writer checks the interval again in case another request stamped the row meanwhile.
     if (due) await services().identity.touchToken({ id });
   } catch {
     // Usage attribution must never turn a trusted request into a failure.
@@ -314,13 +322,25 @@ export async function listTokensByUser(userId: string): Promise<TokenRow[]> {
   )).rows;
 }
 
-/** Trusted hosted authorization metadata, never token plaintext or caller-supplied names. */
-export function hostedCredentialDescriptor(owner:string,id:string):Promise<{name:string|null;expiresAt:string|null;scoped:boolean}|null>{
- return answeredOnce(`descriptor:${owner}:${id}`,()=>readCredentialDescriptor(owner,id));
+interface CredentialDescriptor {
+  name: string | null;
+  expiresAt: string | null;
+  scoped: boolean;
+  touchDue: boolean;
 }
-async function readCredentialDescriptor(owner:string,id:string):Promise<{name:string|null;expiresAt:string|null;scoped:boolean}|null>{
- const db=await getDb();const row=(await db.query<{name:string|null;expires_at:string|null;request_authority:boolean}>(`SELECT name,expires_at,request_authority FROM tokens WHERE id=$1 AND group_id IS NULL AND user_id=$2 AND ${LIVE_TOKEN_SQL}`,[id,owner])).rows[0];
- return row?{name:row.name,expiresAt:row.expires_at,scoped:row.request_authority}:null;
+
+/** Trusted hosted authorization metadata and usage sample, from the same live row. */
+export function hostedCredentialDescriptor(owner: string, id: string, { revalidate = false } = {}): Promise<CredentialDescriptor | null> {
+  const read = () => readCredentialDescriptor(owner, id);
+  return revalidate ? read() : answeredOnce(`descriptor:${owner}:${id}`, read);
+}
+
+async function readCredentialDescriptor(owner: string, id: string): Promise<CredentialDescriptor | null> {
+  const db = await getDb();
+  const row = (await db.query<{ name: string | null; expires_at: string | null; request_authority: boolean; touch_due: boolean }>(
+    `SELECT name, expires_at, request_authority, (${TOKEN_TOUCH_DUE_SQL}) AS touch_due
+       FROM tokens WHERE id=$1 AND group_id IS NULL AND user_id=$2 AND ${LIVE_TOKEN_SQL}`, [id, owner])).rows[0];
+  return row ? { name: row.name, expiresAt: row.expires_at, scoped: row.request_authority, touchDue: row.touch_due } : null;
 }
 
 /** Deployment extensions may upgrade their own server-minted grant namespace.
