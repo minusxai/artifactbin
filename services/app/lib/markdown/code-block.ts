@@ -42,20 +42,54 @@ function renderTokens(tokens: readonly (string | PrismToken)[]): string {
   }).join('');
 }
 
+/** The language renderCodeBlock marks `source` with (`class="language-<x>"`), without tokenizing it; null for plain text. */
+export function codeBlockLanguage(source: string, language?: string | null): string | null {
+  const canonical = normalizeLanguage(language);
+  return canonical && source.length <= MAX_HIGHLIGHT_CODE_LENGTH && Prism.languages[canonical] ? canonical : null;
+}
+
+interface Highlighted { language: string; tokens: (string | PrismToken)[] }
+/** The canonical language and the grammar's tokens, or null when the code is written as plain text. */
+function highlighted(source: string, language?: string | null): Highlighted | null {
+  const canonical = normalizeLanguage(language);
+  if (!canonical || source.length > MAX_HIGHLIGHT_CODE_LENGTH) return null;
+  try {
+    const grammar = Prism.languages[canonical] as PrismGrammar | undefined;
+    return grammar ? { language: canonical, tokens: Prism.tokenize(source, grammar) as (string | PrismToken)[] } : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Render code as inert escaped text using only the explicitly bundled Prism grammars. */
 export function renderCodeBlock(source: string, language?: string | null): string {
-  const canonical = normalizeLanguage(language);
-  if (!canonical || source.length > MAX_HIGHLIGHT_CODE_LENGTH) {
-    return `<pre><code>${escapeHtml(source)}</code></pre>`;
-  }
+  const code = highlighted(source, language);
+  if (!code) return `<pre><code>${escapeHtml(source)}</code></pre>`;
+  return `<pre><code class="language-${code.language}" data-language="${code.language}">${renderTokens(code.tokens)}</code></pre>`;
+}
 
-  try {
-    const grammarName = canonical === 'html' ? 'html' : canonical;
-    const grammar = Prism.languages[grammarName] as PrismGrammar | undefined;
-    if (!grammar) return `<pre><code>${escapeHtml(source)}</code></pre>`;
-    const tokens = Prism.tokenize(source, grammar) as (string | PrismToken)[];
-    return `<pre><code class="language-${canonical}" data-language="${canonical}">${renderTokens(tokens)}</code></pre>`;
-  } catch {
-    return `<pre><code>${escapeHtml(source)}</code></pre>`;
-  }
+export interface CodeHighlight {
+  /** The canonical language renderCodeBlock writes as `class="language-<x>" data-language="<x>"`. */
+  language: string;
+  /** The source cut where any token starts or ends: each run with its token classes, outermost first. */
+  ranges: Array<{ from: number; to: number; classNames: string[] }>;
+}
+/** renderCodeBlock's highlighting as source ranges (what an editor decorates), or null when it writes plain text. */
+export function codeHighlight(source: string, language?: string | null): CodeHighlight | null {
+  const code = highlighted(source, language);
+  if (!code) return null;
+  const ranges: CodeHighlight['ranges'] = [];
+  let offset = 0;
+  const walk = (tokens: readonly (string | PrismToken)[], classNames: string[]) => {
+    for (const token of tokens) {
+      const content = typeof token === 'string' ? token : token.content;
+      const className = typeof token === 'string' ? undefined : tokenClasses.get(token.type);
+      const inner = className ? [...classNames, className] : classNames;
+      if (typeof content !== 'string') { walk(content, inner); continue; }
+      if (inner.length && content.length) ranges.push({ from: offset, to: offset + content.length, classNames: inner });
+      offset += content.length;
+    }
+  };
+  walk(code.tokens, []);
+  return { language: code.language, ranges };
 }

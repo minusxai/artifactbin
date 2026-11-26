@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 import { MODULE_CACHE_DIR, schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
 import { LEAKS_PAST_ITS_FILE } from './scripts/lib/test-isolation.mjs';
+import { SLIM_ENTITIES_INLINE, slimEntitiesVite } from './scripts/lib/slim-entities.mjs';
 
 const enrolled = (list: string) => JSON.parse(readFileSync(new URL(`./scripts/ci/${list}`, import.meta.url), 'utf8')) as string[];
 // A file that replaces modules or rewrites the environment keeps a fresh module graph per file (scripts/lib/test-isolation.mjs,
@@ -29,9 +30,12 @@ const byIsolation = (name: string, list: string, test: Record<string, unknown>) 
 // measured CI time (scripts/ci/test-timings.json) onto the shards, longest first, so each file runs exactly once.
 export default defineConfig({
   root: import.meta.dirname,
+  // markdown-it's `entities` import resolves to lib/markdown's slim decoder (scripts/lib/slim-entities.mjs), as in vitest.config.ts.
+  plugins: [slimEntitiesVite()],
   resolve: { alias: { '@': new URL('./services/app', import.meta.url).pathname } },
   test: {
     globals: true,
+    server: { deps: { inline: SLIM_ENTITIES_INLINE } },
     environment: 'node',
     sequence: { sequencer: TimedSequencer },
     // Both setup files open the database through test/setup/database.ts, which keeps its schema image here.
