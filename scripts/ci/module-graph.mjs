@@ -175,7 +175,8 @@ const BUNDLED_LEAVES = {
     'shared-request', 'urls',
   ],
   'lib/local-connection': ['browser'],
-  'lib/markdown': ['code-block', 'display', 'editor'],
+  // `editing` is the editing behaviour the Markdown field and the document editor share (list indent, clipboard).
+  'lib/markdown': ['code-block', 'display', 'editing', 'editor'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/html-systems': ['story-systems', 'story-themes', ],
   'lib/workspace': ['artifact-starters', 'breadcrumb', 'visibility-icons'],
