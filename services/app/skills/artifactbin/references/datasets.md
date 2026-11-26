@@ -132,7 +132,8 @@ under the same permissions. Pinned bindings cannot upload.
 
 `<link rel="af-dataset" data-af-name="wh" href="default:DB">` reads the install's database
 ([[ connectors ]]; empty DB: its default), signed in, read-only: `wh.table` in its own SQL.
-Agents: `sql.mjs query default:DB 'SQL'`, `schema default:DB`; named: `default:NAME:DB`.
+Agents: `sql.mjs query default:DB 'SQL'` (`--output F.csv`: 100000 rows),
+`schema default:DB`; named: `default:NAME:DB`.
 Declared queries too, with `data-af-params='{"r":["EU"],"d":"date"}'`; `groups.mjs --help`.
 
 ## Live datasets

@@ -8,7 +8,8 @@
 import net from 'node:net';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { colonParameters, connectionSummary, connectorError, connectorList, mapQualifiers, mysqlLiteral, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
-import { numberValue } from '../src/answer';
+import { limitsOf, numberValue } from '../src/answer';
+import { CONNECTOR_FILE_LIMITS, CONNECTOR_LIMITS } from '@artifactbin/contracts/connectors';
 import { driverFailure } from '../src/errors';
 import { readOnlyStatement } from '../src/statement';
 import { startPgliteWire, type PgliteWire } from '@artifactbin/test-support/pglite-wire';
@@ -205,6 +206,18 @@ describe('postgres, end to end', () => {
     expect([some.rows.length, some.truncated, some.rows.at(-1)]).toEqual([1200, true, { g: 1200 }]);
     expect(await failure(pg.query({ text: "select repeat('x', 1000) as x from generate_series(1, 100)", params: {}, viewer: null, limits: { bytes: 20_000 } }))).toMatchObject({ code: 'result_too_large' });
     expect((await pg.query({ text: 'select 1 as one', params: {}, viewer: null, limits: { rows: 1e9 } })).rows).toEqual([{ one: 1 }]);
+    // A read saved to a file asks past the common limits, up to the file limits; 6 MB passes only when asked.
+    const wide = "select repeat('x', 500) as x from generate_series(1, 12000)";
+    expect(await failure(pg.query({ text: wide, params: {}, viewer: null }))).toMatchObject({ code: 'result_too_large' });
+    const file = await pg.query({ text: wide, params: {}, viewer: null, limits: { rows: 12_000, bytes: CONNECTOR_FILE_LIMITS.bytes } });
+    expect([file.rows.length, file.truncated]).toEqual([12_000, undefined]);
+  });
+
+  it('defaults to the common limits and clamps an asked limit to the file limits', () => {
+    expect(CONNECTOR_FILE_LIMITS).toEqual({ rows: 100_000, bytes: 32 * 1024 * 1024 });
+    expect(limitsOf({})).toMatchObject({ rows: CONNECTOR_LIMITS.rows, bytes: CONNECTOR_LIMITS.bytes });
+    expect(limitsOf({ limits: { rows: 1e9, bytes: 1e12 } })).toMatchObject(CONNECTOR_FILE_LIMITS);
+    expect(limitsOf({ limits: { rows: 20_000, bytes: 8e6 } })).toMatchObject({ rows: 20_000, bytes: 8e6 });
   });
 
   it('opens the database a namespace names, in its own session, and lists the schema as the viewer', async () => {

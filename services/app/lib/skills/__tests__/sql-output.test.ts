@@ -37,6 +37,23 @@ it('sends --limit to the default connection and preserves its truncated marker',
   expect(sent).toEqual([{route: '/api/default-connection/sql', body: {sql, namespace: 'wh', limit: 2}}]);
 });
 
+it('saves up to 100,000 rows of a default:DB read to a file, prints at most 10,000, and refuses more before querying', async () => {
+  const sql = 'select * from monthly';
+  expect(await query('default:wh', sql, {limit: '100000', output: path.join(root, 'big.csv')})).toMatchObject({rowCount: 8});
+  await query('default:wh', sql, {output: path.join(root, 'default.json')});
+  expect(sent.map(s => s.body)).toEqual([{sql, namespace: 'wh', limit: 100000, output: 'file'},
+    {sql, namespace: 'wh', limit: 1000, output: 'file'}]);
+  sent = [];
+  await expect(query('default:wh', sql, {limit: '10001'})).rejects.toMatchObject({code: 'limit_too_large', exit: 2,
+    message: expect.stringContaining('at most 10000'), recovery: expect.stringContaining('--output FILE.csv')});
+  await expect(query('default:wh', sql, {limit: '100001', output: path.join(root, 'over.csv')}))
+    .rejects.toMatchObject({code: 'invalid_limit', exit: 2});
+  for (const target of ['DATA12', 'PAGE12'])
+    await expect(query(target, sql, {limit: '10001', output: path.join(root, 'id.csv')})).rejects
+      .toMatchObject({code: 'limit_too_large', exit: 2, recovery: expect.stringContaining('default:DB')});
+  expect(sent).toEqual([]);
+});
+
 it('writes every row of a read to a new CSV and prints the count, columns and a cut sample instead', async () => {
   const out = path.join(root, 'monthly.csv');
   const read = await query('default:wh', 'select * from monthly', {output: out});
@@ -126,7 +143,7 @@ it('warns once on stderr when a read is cut, leaving stdout and the result as th
   expect(await run('query', 'default:wh', 'select * from monthly', '--limit', '2')).toEqual({err: cut,
     out: {ok: true, code: 'completed', columns, rows: rows.slice(0, 2), truncated: true}});
   const saved = await run('query', 'default:wh', 'select * from monthly', '--limit', '2', '--output', path.join(root, 'cut.csv'));
-  expect(saved.err).toBe(cut);
+  expect(saved.err).toBe(cut.replace('10000', '100000'));
   expect(saved.out).toMatchObject({ok: true, rowCount: 2, truncated: true});
   expect(await run('query', 'PAGE12', 'select * from t', '--limit', '3')).toMatchObject({err: cut.replaceAll('2', '3'),
     out: {rows: rows.slice(0, 3), truncated: true}});

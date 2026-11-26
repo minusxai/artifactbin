@@ -180,6 +180,20 @@ it('bounds agent reads at the requested limit or 1,000 rows by default', async (
   for (const limit of [0, -1, 10_001, 1.5, '2', null]) {
     expect(await agent(alice, {sql, limit})).toMatchObject({status: 400, body: {error: 'validation_failed'}});
   }
+  expect((await agent(alice, {sql, limit: 10_001})).body.message).toMatch(/output: 'file'.*100000/);
+});
+
+it('lets a read saved to a file ask for up to 100,000 rows and 32 MiB; every other read keeps 10,000 rows and 4 MiB', async () => {
+  const alice = await person('alice');
+  const sql = 'select g from guarded.many order by g', wide = "select g, repeat('x', 500) as pad from guarded.many order by g";
+  const file = await agent(alice, {sql, limit: 100_000, output: 'file'});
+  expect([ok(file).rows.length, ok(file).rows.at(-1), file.body.truncated]).toEqual([10_001, {g: 10_001}, undefined]);
+  const cut = await agent(alice, {sql, limit: 10_000, output: 'file'});
+  expect([ok(cut).rows.length, cut.body.truncated]).toEqual([10_000, true]);
+  expect([(await agent(alice, {sql: wide, limit: 10_000})).body.error, ok(await agent(alice, {sql: wide, limit: 100_000, output: 'file'})).rows.length])
+    .toEqual(['result_too_large', 10_001]);
+  for (const call of [{limit: 100_001, output: 'file'}, {limit: 20_000, output: 'stdout'}, {output: true}])
+    expect(await agent(alice, {sql, ...call}), JSON.stringify(call)).toMatchObject({status: 400, body: {error: 'validation_failed'}});
 });
 
 it('shows the settings row without the secret, and tests the connection for signed-in sessions only, within the allowance', async () => {

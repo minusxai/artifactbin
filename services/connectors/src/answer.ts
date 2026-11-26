@@ -1,6 +1,6 @@
 /**
- * WHAT EVERY CONNECTOR SHARES ABOUT AN ANSWER: the effective limits (a query may lower the trusted read policy
- * and CONNECTOR_LIMITS rows/bytes, never raise them), the collector that stops at the row limit (`truncated`) and fails past the byte limit, the viewer and
+ * WHAT EVERY CONNECTOR SHARES ABOUT AN ANSWER: the effective limits (a query may lower the trusted read policy;
+ * rows/bytes are CONNECTOR_LIMITS unless it asks, and never past CONNECTOR_FILE_LIMITS), the collector that stops at the row limit (`truncated`) and fails past the byte limit, the viewer and
  * namespace checks, and the value rules of the common types:
  *
  *  - `number`: a JS number. A 64-bit integer outside ±2^53 stays its exact decimal string (an id must not round);
@@ -10,14 +10,14 @@
  *  - `text` everything else; binary values as `\x` and lowercase hex.
  */
 import type { ConnectorAnswer, ConnectorColumn, ConnectorDialect, ConnectorJson, ConnectorLimits, ConnectorQuery, ConnectorValueType } from '@artifactbin/contracts/connectors';
-import { CONNECTOR_LIMITS } from '@artifactbin/contracts/connectors';
+import { CONNECTOR_FILE_LIMITS, CONNECTOR_LIMITS } from '@artifactbin/contracts/connectors';
 import { sqlTimeout, SQL_QUERY_DEFAULT_MS } from '@artifactbin/contracts/sql';
 import { ConnectorFailure } from './errors';
 
 export function limitsOf(query: Pick<ConnectorQuery, 'limits'>, timeoutMs:number=SQL_QUERY_DEFAULT_MS): ConnectorLimits {
-  const lower = (name: keyof ConnectorLimits) => {
+  const lower = (name: 'rows' | 'bytes') => {
     const asked = query.limits?.[name];
-    return typeof asked === 'number' && Number.isInteger(asked) && asked > 0 ? Math.min(asked, CONNECTOR_LIMITS[name]) : CONNECTOR_LIMITS[name];
+    return typeof asked === 'number' && Number.isInteger(asked) && asked > 0 ? Math.min(asked, CONNECTOR_FILE_LIMITS[name]) : CONNECTOR_LIMITS[name];
   };
   return { rows: lower('rows'), bytes: lower('bytes'), timeoutMs: sqlTimeout(query.limits?.timeoutMs,timeoutMs,timeoutMs,'connector read timeout',true) };
 }
