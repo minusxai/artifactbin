@@ -1,8 +1,7 @@
 /**
- * native-v1's image node, READ side only (native-schema.ts): the codec reads `<img src alt title>` from stored HTML with
- * lib/markdown's source rule, the shared state carries it, validation checks it, saving keeps it and Markdown reads
- * show it. Nothing writes a new one in this release: an agent's HTML revision keeps the images its base holds and
- * refuses any other, and the legacy migration refuses them as before.
+ * native-v1's image node (native-schema.ts): the codec reads `<img src alt title>` with lib/markdown's source rule, the
+ * shared state carries it, validation checks it, saving keeps it and Markdown reads show it. An agent's HTML revision
+ * adds, changes and removes images under the same rule; the legacy migration refuses them as before.
  */
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
@@ -85,23 +84,31 @@ describe('an image in the shared state', () => {
   });
 });
 
-describe('no write creates an image node yet', () => {
-  const revise = (html: string) => {
-    const { state, snapshot } = createRegionState(kind, SAVED);
+describe('an agent\'s HTML revision writes images', () => {
+  const revise = (html: string, saved = SAVED) => {
+    const { state, snapshot } = createRegionState(kind, saved);
     const { update } = applyRegionRevision({ kind, live: state, savedSnapshot: snapshot, html });
     const doc = openRegionDoc(state, { kind });
     Y.applyUpdate(doc, update);
+    expect(() => validateRegionState(kind, doc)).not.toThrow();
     return regionHtml(kind, Y.encodeStateAsUpdate(doc));
   };
-  it('an agent\'s HTML revision keeps the images the document holds', () => {
+  it('keeps the images the document holds, with their ids', () => {
     expect(revise(SAVED.replace('See ', 'Look at '))).toBe(SAVED.replace('See ', 'Look at '));
     expect(revise('<p data-af-id="p1">Only <img src="ref:abcdef12" alt="A &amp; B" title="Chart"></p>')).toBe('<p data-af-id="p1">Only <img data-af-id="i1" src="ref:abcdef12" alt="A &amp; B" title="Chart"></p>');
   });
-  it('an agent\'s HTML revision naming any other image refuses, as before images existed', () => {
-    expect(refusal(() => revise(`${SAVED}<p><img src="ref:zzzzzz99" alt="new"></p>`))).toEqual(['node img']);
-    expect(refusal(() => revise(SAVED.replace('alt="A &amp; B"', 'alt="changed"')))).toEqual(['node img']);
+  it('adds a new image and changes one whose alt it edits', () => {
+    expect(revise(`${SAVED}<p><img src="ref:zzzzzz99" alt="new"></p>`)).toBe(`${SAVED}<p><img src="ref:zzzzzz99" alt="new"></p>`);
+    expect(revise(SAVED.replace('alt="A &amp; B"', 'alt="changed"'))).toBe(SAVED.replace('alt="A &amp; B"', 'alt="changed"'));
+    expect(revise('<p>now <img src="https://i.example/n.png" alt="n"></p>', '<p>no images</p>')).toBe('<p>now <img src="https://i.example/n.png" alt="n"></p>');
+  });
+  it('refuses an image the document may not hold, whatever its base', () => {
     const { state, snapshot } = createRegionState(kind, '<p>no images</p>');
-    expect(refusal(() => applyRegionRevision({ kind, live: state, savedSnapshot: snapshot, html: '<p><img src="ref:abcdef12"></p>' }))).toEqual(['attribute src']);
+    for (const [html, detail] of [
+      ['<p><img src="javascript:alert(1)"></p>', 'image source'], ['<p><img src="data:image/png;base64,AA"></p>', 'image source'],
+      ['<p><img src="http://i.example/p.png"></p>', 'image source'], ['<p><a href="https://e.example"><img src="ref:abcdef12"></a></p>', 'image mark'],
+      ['<p><img src="ref:abcdef12" onerror="x"></p>', 'attribute onerror'],
+    ]) expect(refusal(() => applyRegionRevision({ kind, live: state, savedSnapshot: snapshot, html })), html).toEqual([detail]);
   });
   it('the legacy migration refuses a region with an image, as before', () => {
     expect(() => convertLegacyPage('<article data-af-id="r" data-af-editable="rich"><p>a <img src="ref:abcdef12"></p></article>')).toThrow();

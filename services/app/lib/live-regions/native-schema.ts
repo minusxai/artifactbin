@@ -1,14 +1,13 @@
 /**
  * Versioned native tree schema. Browser and server use precisely the same supported nodes.
  *
- * The image node (`img src alt [title]`, inline, an atom with its own `data-af-id`) is READ only in this release: the
- * codec (native-html.ts) reads it from stored HTML, validation (native-state.ts) checks it, the editor keeps it and
- * shows it, and nothing creates one. It has no HTML parse rule, so an HTML paste or drop cannot build one, and the
- * Markdown writers (native-markdown.ts) turn image syntax into text; an agent's HTML revision keeps the images its base
- * holds and refuses others (native-state.ts reviseNative). Stored HTML is read as it is: a page published with an
- * `<img>` in a document region opens with it (state.ts createRegionState). Writers ship a release later, once every editor
- * that may meet an image can hold it (an editor whose schema lacks a node deletes it from the shared document).
- * An image carries no marks: the collaboration binding stores only a node's attributes, never its marks.
+ * The image node (`img src alt [title]`, inline, an atom with its own `data-af-id`): the codec (native-html.ts) reads
+ * and writes it, validation (native-state.ts) checks it, Markdown (native-markdown.ts) and HTML revisions write it, and
+ * the editor shows it, builds it from a pasted or dropped `<img>` and inserts one by address (native-region-editor's
+ * `image` command). Every writer takes only the sources lib/markdown's imageAllowed allows (https, relative, an upload
+ * `ref:<id>`); a pasted image with any other source, a `data:` one included, is dropped. The editor shows an image at
+ * the address the served page gave it, so a copy carries its stored source beside that one (`data-af-src`), which the
+ * paste rule prefers. An image carries no marks: the collaboration binding stores only a node's attributes.
  */
 import { Extension, getSchema, Node as TiptapNode, type Mark, type Node } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
@@ -17,8 +16,11 @@ import TaskItem from '@tiptap/extension-task-item';
 import { Plugin } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts/artifact-reference';
+import { imageAllowed } from '../markdown/href';
 import { safeHref } from './href';
 export const NATIVE_ROOT = 'native-v1';
+/** The longest image title a document stores (native-html.ts and native-state.ts refuse a longer one). */
+export const IMAGE_TITLE_MAX = 512;
 const Identity = Extension.create({
   name: 'regionIdentity',
   addGlobalAttributes: () => [{
@@ -94,33 +96,51 @@ const IdentifiedStarterKit = StarterKit.extend({
         : extension);
   },
 });
-/** What an editor shows for an image: the address the served page gave it (by its id), else an upload's raw address
- * or the source as stored. */
-const imageAddress = (src: string, afId: unknown, served?: ReadonlyMap<string, string>): string => {
-  const shown = typeof afId === 'string' ? served?.get(afId) : undefined;
+/** What an editor shows for an image: the address the served page gave it (by its id), else an upload's raw address,
+ * an external one through the page's first-view door (as the served page shows one no cached copy covers yet, so the
+ * editor's browser never fetches it from its own host), or the source as stored. */
+const imageAddress = (src: string, afId: unknown, options: NativeExtensionOptions): string => {
+  const shown = typeof afId === 'string' ? options.servedImages?.get(afId) : undefined;
   if (shown) return shown;
   const id = ARTIFACT_REFERENCE_PATTERN.exec(src)?.[1];
-  return id ? `/a/${id}/raw` : src;
+  if (id) return `/a/${id}/raw`;
+  return options.pageId && /^https:\/\//i.test(src) ? `/a/${options.pageId}/assets?u=${encodeURIComponent(src)}` : src;
 };
-const NativeImage = (served?: ReadonlyMap<string, string>) => TiptapNode.create({
+/** A pasted or dropped `<img>`'s source: the stored one a copy carries (`data-af-src`), else its `src`; null when the
+ * document may not hold it. */
+const imageSource = (element: HTMLElement): string | null => {
+  const stored = element.getAttribute('data-af-src'), shown = element.getAttribute('src');
+  const src = stored && imageAllowed(stored) ? stored : shown;
+  return src && imageAllowed(src) ? src : null;
+};
+const NativeImage = (options: NativeExtensionOptions) => TiptapNode.create({
   name: 'image',
   inline: true,
   group: 'inline',
   atom: true,
   marks: '',
-  addAttributes: () => ({ src: { default: null }, alt: { default: '' }, title: { default: null } }),
-  // No parse rule: nothing in this release builds an image from HTML (paste, drop, setContent).
-  parseHTML: () => [],
-  renderHTML: ({ node, HTMLAttributes }) => ['img', { ...HTMLAttributes, src: imageAddress(String(node.attrs.src ?? ''), node.attrs.afId, served), alt: node.attrs.alt ?? '' }],
+  // Tiptap reads each attribute through its own parseHTML (over a rule's getAttrs); the rule only refuses.
+  addAttributes: () => ({
+    src: { default: null, parseHTML: imageSource },
+    alt: { default: '', parseHTML: element => element.getAttribute('alt') ?? '' },
+    title: { default: null, parseHTML: element => element.getAttribute('title')?.slice(0, IMAGE_TITLE_MAX) ?? null },
+  }),
+  parseHTML: () => [{ tag: 'img', getAttrs: element => (imageSource(element) ? null : false) }],
+  renderHTML: ({ node, HTMLAttributes }) => {
+    const src = String(node.attrs.src ?? '');
+    return ['img', { ...HTMLAttributes, src: imageAddress(src, node.attrs.afId, options), 'data-af-src': src, alt: node.attrs.alt ?? '' }];
+  },
 });
 export interface NativeExtensionOptions {
   /** The served page's image addresses by image id (`data-af-id`), which the editor shows in place of the stored source. */
   servedImages?: ReadonlyMap<string, string>;
+  /** The page's id, for the first-view door (`/a/<id>/assets?u=`) an external image no served address covers shows through. */
+  pageId?: string;
 }
 export function nativeExtensions(options: NativeExtensionOptions = {}) {
   return [IdentifiedStarterKit.configure({ undoRedo: false, trailingNode: false, underline: false, strike: false,
     codeBlock: { enableTabIndentation: true, tabSize: 2 },
     link: { openOnClick: false, autolink: false, linkOnPaste: false, isAllowedUri: href => safeHref(href) === href },
-  }), TaskList, TaskItem.extend({content:'(paragraph | heading) block*'}).configure({ nested: true }), NativeImage(options.servedImages), Identity, LegacyCheckbox];
+  }), TaskList, TaskItem.extend({content:'(paragraph | heading) block*'}).configure({ nested: true }), NativeImage(options), Identity, LegacyCheckbox];
 }
 export const nativeSchema = /* @__PURE__ */ getSchema(/* @__PURE__ */ nativeExtensions());

@@ -6,7 +6,7 @@
  *
  * - Identities, a link's target, rel and class, and other attributes Markdown cannot spell are not written.
  * - A legacy checkbox item (role="checkbox") cannot be written in Markdown and refuses, as before.
- * - An image is written as `![alt](src "title")`; a Markdown write cannot send one back (state.ts refuses it).
+ * - An image is written as `![alt](src "title")`, which native-markdown.ts reads back as the same image.
  * - A line break inside a heading, which Markdown cannot hold, is written as a space.
  * - Documents store no list spacing: every list is written tight unless its content needs it loose.
  */

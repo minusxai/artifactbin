@@ -1,7 +1,7 @@
 /**
  * Documents' Markdown through lib/markdown: Markdown in (native-markdown.ts: the shared parse, fitted to native-v1) and
  * out (native-markdown-save.ts: the shared serializer). The fit rules, what an agent reads and sends back, the shared
- * rules that differ from the previous parser, and that no Markdown write creates an image node.
+ * rules that differ from the previous parser, and Markdown's images, which a paste or an agent write builds.
  */
 import { describe, expect, it } from 'vitest';
 import * as Y from 'yjs';
@@ -109,17 +109,57 @@ describe('an agent reads a document as Markdown and writes it back', () => {
   });
 });
 
-describe('no Markdown write creates an image node yet', () => {
-  it('image syntax in a paste or an agent write stays the text it was typed as', () => {
-    const markdown = '![chart](https://i.example/c.png) and ![upload](ref:abcdef12 "T")';
-    expect(JSON.stringify(nativeMarkdownJson(markdown))).not.toContain('"image"');
-    // The text is the source as typed; its bare address links, as any bare address does (the shared rule).
-    expect(write('<p data-af-id="a">old</p>', markdown))
-      .toBe(`<p data-af-id="a">![chart](<a href="https://i.example/c.png" ${LINK}>https://i.example/c.png</a>) and ![upload](ref:abcdef12 &quot;T&quot;)</p>`);
+describe('Markdown writes images', () => {
+  it.each([
+    ['an https image and an upload, each with its alt and title', '![chart](https://i.example/c.png) and ![upload](ref:abcdef12 "T")',
+      '<p><img src="https://i.example/c.png" alt="chart"> and <img src="ref:abcdef12" alt="upload" title="T"></p>'],
+    ['a relative source', '![p](/a/x/raw)', '<p><img src="/a/x/raw" alt="p"></p>'],
+    ['in a heading, a list item and a table row', '## ![h](ref:abcdef12) Head\n\n- ![i](ref:abcdef12)\n\n| a | b |\n| --- | --- |\n| ![c](ref:abcdef12) | d |',
+      '<h2><img src="ref:abcdef12" alt="h"> Head</h2><ul><li><p><img src="ref:abcdef12" alt="i"></p></li></ul><p>a | b</p><p><img src="ref:abcdef12" alt="c"> | d</p>'],
+    ['an image inside a link or bold carries no mark (the document refuses a marked image)', '[![badge](https://b.example/b.svg)](https://e.example) **![a](ref:abcdef12) b**',
+      `<p><img src="https://b.example/b.svg" alt="badge"> <img src="ref:abcdef12" alt="a"><strong> b</strong></p>`],
+  ])('%s', (_name, markdown, expected) => {
+    expect(html(markdown)).toBe(expected);
+    expect(() => createRegionState(kind, expected)).not.toThrow();
   });
-  it('a Markdown write over a document holding an image refuses rather than turn it into text', () => {
-    const saved = '<p data-af-id="a">see <img data-af-id="i" src="ref:abcdef12" alt="chart"></p>';
+
+  it('a title is cut to 512 characters, as the document stores it', () => {
+    expect(html(`![t](ref:abcdef12 "${'t'.repeat(600)}")`)).toBe(`<p><img src="ref:abcdef12" alt="t" title="${'t'.repeat(512)}"></p>`);
+  });
+
+  it.each([
+    ['http', '![x](http://i.example/p.png)'], ['data', '![x](data:image/png;base64,AA)'], ['javascript', '![x](javascript:alert(1))'], ['protocol-relative', '![x](//host.example/p.png)'],
+  ])('an image whose source the document refuses (%s) stays the text it was typed as, never an image', (_name, markdown) => {
+    const json = JSON.stringify(nativeMarkdownJson(markdown));
+    expect(json).not.toContain('"image"');
+    expect(json).toContain('![x](');
+  });
+
+  it('an agent\'s write adds an image beside the text it keeps', () => {
+    expect(write('<p data-af-id="a">old</p><p data-af-id="b">kept</p>', 'old ![c](https://i.example/c.png)\n\nkept'))
+      .toBe('<p data-af-id="a">old <img src="https://i.example/c.png" alt="c"></p><p data-af-id="b">kept</p>');
+  });
+
+  it('an edit beside an image keeps the image, its id and every untouched block byte for byte', () => {
+    const saved = '<h2 data-af-id="h">Plan</h2><p data-af-id="a">See <img data-af-id="i" src="ref:abcdef12" alt="chart" title="T"> here</p><p data-af-id="z">omega</p>';
+    expect(write(saved, regionMarkdown(kind, saved).replace('here', 'there'))).toBe(saved.replace('here', 'there'));
+    expect(write(saved, regionMarkdown(kind, saved).replace('omega', 'omega, revised'))).toBe(saved.replace('omega', 'omega, revised'));
+  });
+
+  it('an agent\'s write removes an image it leaves out, and changes one whose alt it edits', () => {
+    const saved = '<p data-af-id="a">See <img data-af-id="i" src="ref:abcdef12" alt="chart"></p>';
+    expect(write(saved, 'See')).toBe('<p data-af-id="a">See</p>');
+    expect(write(saved, 'See ![bar chart](ref:abcdef12)')).toBe('<p data-af-id="a">See <img data-af-id="i" src="ref:abcdef12" alt="bar chart"></p>');
+  });
+
+  it.each([
+    ['an image with alt and title', '<p data-af-id="a">See <img data-af-id="i" src="ref:abcdef12" alt="A &amp; B" title="Chart"> and <img data-af-id="j" src="https://i.example/p.png?a=1&amp;b=2" alt=""></p>'],
+    ['sources and text Markdown must escape', '<p data-af-id="a"><img data-af-id="i" src="https://i.example/a(1).png" alt="x [y] *z*" title="say &quot;hi&quot;"> <img data-af-id="j" src="https://i.example/caf%C3%A9.png" alt="café"></p>'],
+    ['images in a heading, a list and a quote', '<h2 data-af-id="h"><img data-af-id="i" src="ref:abcdef12" alt="logo"> Title</h2><ul data-af-id="l"><li data-af-id="li"><p data-af-id="lp">item <img data-af-id="j" src="/a/x/raw" alt=""></p></li></ul><blockquote data-af-id="q"><p data-af-id="qp"><img data-af-id="k" src="ref:abcdef12" alt="q"></p></blockquote>'],
+  ])('%s: sending back what was read changes nothing', (_name, saved) => {
     const { state, snapshot } = createRegionState(kind, saved);
-    expect(() => applyRegionRevision({ kind, live: state, savedSnapshot: snapshot, markdown: regionMarkdown(kind, saved) })).toThrow('image requires HTML');
+    const markdown = regionMarkdown(kind, saved);
+    const { update } = applyRegionRevision({ kind, live: state, savedSnapshot: snapshot, markdown });
+    expect(emptyUpdate(update), markdown).toBe(true);
   });
 });

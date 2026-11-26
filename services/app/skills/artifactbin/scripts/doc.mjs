@@ -17,8 +17,8 @@ Examples:
   node scripts/doc.mjs read ID --json            # {regionId, kind, version, markdown}
 Gotchas: to change a doc people may be editing, use write, never a whole-page publish. Send the
   whole region back edited in place: text you remove is removed. Markdown keeps headings,
-  paragraphs, lists, quotes, code blocks, rules, line breaks, bold, italic, code and links;
-  strikethrough, tables, images and raw HTML stay text. Empty paragraphs are not kept.
+  paragraphs, lists, quotes, code blocks, rules, line breaks, bold, italic, code, links and
+  images; strikethrough, tables and raw HTML stay text. Empty paragraphs are not kept.
   region_snapshot_missing: read again into a new file and reapply your edit. After exit 5
   run the same write again: it resumes the saved request and never writes twice.
 Exit: 0 ok; 1 failed; 2 invocation or unsupported content; 3 auth/access; 4 read again;

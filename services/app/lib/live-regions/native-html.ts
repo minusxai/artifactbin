@@ -6,14 +6,14 @@
  * at the top level as inside every non-textblock node; any other text outside a block still refuses.
  *
  * Images (`<img src alt [title]>`, src as lib/markdown's imageAllowed: https, relative or an upload `ref:<id>`) are
- * read only where the caller asks (`images`): a reader of stored content reads them all; a revision reads only the
- * ones its base already holds; everything else refuses `node img`, as before images existed (native-schema.ts).
+ * read where the caller asks (`images`): stored content, revisions and saves read them; the legacy migration, which
+ * never met one, refuses `node img` as before images existed.
  */
 import { parseFragment, type DefaultTreeAdapterMap } from 'parse5';
 import type { JSONContent } from '@tiptap/core';
 import type { Mark, Node as PMNode } from 'prosemirror-model';
 import { imageAllowed } from '../markdown/href';
-import { nativeSchema } from './native-schema';
+import { IMAGE_TITLE_MAX, nativeSchema } from './native-schema';
 import { LiveRegionRefusal } from './refusal';
 import { safeHref, isNodeId } from './schema';
 const tags: Record<string,string> = { p:'paragraph', ul:'bulletList', ol:'orderedList', li:'listItem', blockquote:'blockquote', pre:'codeBlock', hr:'horizontalRule', br:'hardBreak' };
@@ -21,12 +21,11 @@ const marks: Record<string,string> = { strong:'bold', b:'bold', em:'italic', i:'
 const refuse = (detail:string):never => { throw new LiveRegionRefusal('unsupported_content',[detail]); };
 type HtmlNode = DefaultTreeAdapterMap['childNode'];
 const blocks = (children:JSONContent[]):JSONContent[] => children.filter(child=>!(child.type==='text' && /^\s*$/.test(child.text??'')));
-export interface NativeImage { src:string; alt:string; title:string|null }
+interface NativeImage { src:string; alt:string; title:string|null }
 export interface NativeHtmlReadOptions {
-  /** Which images to read: none by default; `true` every allowed one; a function the ones it accepts. */
-  images?: boolean | ((image:NativeImage)=>boolean);
+  /** Whether to read images (every allowed one); none by default. */
+  images?: boolean;
 }
-export const IMAGE_TITLE_MAX = 512;
 export function readNativeHtml(html:string,options:NativeHtmlReadOptions={}):PMNode {
   const walk = (nodes:HtmlNode[], inherited:NonNullable<JSONContent['marks']> = [], code=false):JSONContent[] => nodes.flatMap(node => {
     if(node.nodeName==='#text') { const text=(node as DefaultTreeAdapterMap['textNode']).value;return text ? [{type:'text',text,marks:inherited}] : []; }
@@ -65,7 +64,6 @@ export function readNativeHtml(html:string,options:NativeHtmlReadOptions={}):PMN
     const read:NativeImage={src:attrs.src??'',alt:attrs.alt??'',title:attrs.title??null};
     if(!read.src||!imageAllowed(read.src))refuse('image source');
     if(read.title!==null&&read.title.length>IMAGE_TITLE_MAX)refuse('image title');
-    if(typeof options.images==='function'&&!options.images(read))refuse('node img');
     return {type:'image',attrs:{afId:attrs['data-af-id']??null,...read}};
   };
   try {const doc=nativeSchema.nodeFromJSON({type:'doc',content:blocks(walk(parseFragment(html).childNodes))});doc.check();return doc;}catch(error){if(error instanceof LiveRegionRefusal)throw error;return refuse('invalid native structure');}
