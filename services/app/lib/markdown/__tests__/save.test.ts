@@ -8,7 +8,12 @@ import { markdownSchema, parse, serialize } from '../editor';
 import type { ParseOptions } from '../display';
 
 const schemas = { plain: markdownSchema(), images: markdownSchema({ images: true }) };
-const doc = (markdown: string, options: ParseOptions = {}): PMNode => (options.images ? schemas.images : schemas.plain).nodeFromJSON(parse(markdown, options));
+/** The parsed document on the editor's schema, checked against it (nodeFromJSON alone does not validate content). */
+const doc = (markdown: string, options: ParseOptions = {}): PMNode => {
+  const node = (options.images ? schemas.images : schemas.plain).nodeFromJSON(parse(markdown, options));
+  node.check();
+  return node;
+};
 const save = (markdown: string, options: ParseOptions = {}) => serialize(doc(markdown, options), { breaks: options.breaks ?? true });
 const readsBack = (markdown: string, options: ParseOptions = {}) => {
   const first = doc(markdown, options);

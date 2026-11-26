@@ -92,6 +92,15 @@ describe('the markup contract', () => {
     expect(html('- \\[ ] escaped\n1. [ ] ordered')).toBe('<ul data-tight="true"><li><p>[ ] escaped</p></li></ul><ol data-tight="true"><li><p>[ ] ordered</p></li></ol>');
     expect(html('- [ ]')).toBe('<ul class="mx-md-check-list" data-tight="true"><li role="checkbox" aria-checked="false" aria-disabled="true"><p></p></li></ul>');
   });
+  it('writes an empty quote as a quote of one empty paragraph, as the editor holds it', () => {
+    expect(html('>')).toBe('<blockquote><p></p></blockquote>');
+  });
+  it('drops an address the rules refuse even from a document parse did not make', () => {
+    const doc = { type: 'doc' as const, content: [{ type: 'paragraph', content: [
+      { type: 'text', text: 'x', marks: [{ type: 'link' as const, attrs: { href: 'javascript:alert(1)', title: null } }] },
+      { type: 'image', attrs: { src: 'http://i.example/p.png', alt: 'a', title: null } }] }] };
+    expect(renderHtml(doc, { classifyLink: () => 'kind', imageAddress: src => src })).toBe('<p><a>x</a><img alt="a" loading="lazy"></p>');
+  });
   it('writes quotes, rules, breaks and code blocks through the shared highlighter', () => {
     expect(html('> a\n\n---\n\nb  \nc')).toBe('<blockquote><p>a</p></blockquote><hr><p>b<br>c</p>');
     expect(html('```ts\nconst a = 1;\n```')).toBe(renderCodeBlock('const a = 1;', 'ts'));

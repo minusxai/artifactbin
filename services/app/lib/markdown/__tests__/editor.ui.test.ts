@@ -5,6 +5,7 @@
  */
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { Editor, type JSONContent } from '@tiptap/core';
+import { Fragment } from 'prosemirror-model';
 import { renderHtml, type MarkdownDoc } from '../display';
 import { EDITOR_ONLY_MARKUP, markdownExtensions, markdownSchema, parse, serialize } from '../editor';
 import { MARK_ORDER } from '../types';
@@ -59,6 +60,7 @@ describe('the editor shows the display markup', () => {
     const doc = parse(markdown, { images: true });
     const display = renderHtml(doc, { classifyLink, imageAddress });
     expect(canonical(show(doc))).toBe(canonical(display));
+    editor.state.doc.check();
   });
   it('removes only what EDITOR_ONLY_MARKUP lists, and the display carries none of the editor-only attributes', () => {
     const all = SAMPLES.map(([, markdown]) => renderHtml(parse(markdown, { images: true }), { classifyLink, imageAddress })).join('');
@@ -80,6 +82,7 @@ describe('mounting', () => {
       mounted.commands.focus('end');
       mounted.view.dom.dispatchEvent(new FocusEvent('focus'));
       expect(onUpdate).not.toHaveBeenCalled();
+      mounted.state.doc.check();
       expect(mounted.state.doc.toJSON()).toEqual(markdownSchema({ images: true }).nodeFromJSON(doc).toJSON());
     } finally { mounted.destroy(); }
   });
@@ -92,6 +95,7 @@ describe('documents built with commands', () => {
     const built = new Editor({ element: document.createElement('div'), extensions: extensions(), content: '' });
     try {
       steps.forEach((step, index) => { expect(step(built), `step ${index}: ${step.toString()}`).toBe(true); });
+      built.state.doc.check();
       return built.state.doc;
     } finally { built.destroy(); }
   };
@@ -109,6 +113,8 @@ describe('documents built with commands', () => {
       e => e.commands.insertContent([text('plain '), text('bold', ['bold']), text(' '), text('code', ['bold', 'code']), text(' and '), text('struck', ['strike']), text('.')]),
       e => e.commands.setHardBreak(), e => e.commands.insertContent([text('- not a list item')]),
       e => e.commands.setHardBreak(), e => e.commands.insertContent([text('# not a heading')]),
+      e => e.commands.setHardBreak(), e => e.commands.insertContent([text('> not a quote')]),
+      e => e.commands.setHardBreak(), e => e.commands.insertContent([text('1. not a number')]),
       e => e.commands.splitBlock(), e => e.commands.toggleBulletList(), e => e.commands.insertContent('first'),
       e => e.commands.splitListItem('listItem'), e => e.commands.insertContent('second'), e => e.commands.sinkListItem('listItem'),
       e => e.commands.splitListItem('listItem'), e => e.commands.liftListItem('listItem'), e => e.commands.liftListItem('listItem'),
@@ -126,8 +132,21 @@ describe('documents built with commands', () => {
     ]);
     const saved = readsBack(doc);
     expect(saved).toContain('```ts\nconst fence = "```";\n```');
-    expect(saved).toContain('~~struck~~.\n\\- not a list item\n\\# not a heading\n\n- first\n  - second\n- [ ] [ ] task text\n\n1. 1\\. numbered');
+    expect(saved).toContain('~~struck~~.\n\\- not a list item\n\\# not a heading\n\\> not a quote\n1\\. not a number\n\n- first\n  - second\n- [ ] [ ] task text\n\n1. 1\\. numbered');
     expect(saved).toContain('| a \\| b | x |\n| --- | --- |\n| 1<br>2 |  |');
+  });
+  it('cannot hold what Markdown cannot write: a break in a heading, a block in a table cell', () => {
+    const schema = markdownSchema({ images: true });
+    const { heading, hardBreak, image, tableCell, tableHeader, paragraph } = schema.nodes;
+    expect(heading!.validContent(Fragment.from(hardBreak!.create()))).toBe(false);
+    expect(heading!.validContent(Fragment.from([schema.text('a'), image!.create({ src: '/i.png' })]))).toBe(true);
+    for (const cell of [tableCell!, tableHeader!]) {
+      expect(cell.validContent(Fragment.from(paragraph!.create()))).toBe(false);
+      expect(cell.validContent(Fragment.from([schema.text('a'), hardBreak!.create()]))).toBe(true);
+    }
+    // Shift-Enter in a heading cannot put a break inside it, whatever the command does instead.
+    const doc = build([e => e.commands.setNode('heading', { level: 1 }), e => e.commands.insertContent('a'), e => { e.commands.setHardBreak(); return true; }]);
+    doc.descendants(node => { if (node.type.name === 'heading') expect(node.content.toJSON()?.some((child: { type: string }) => child.type === 'hardBreak') ?? false).toBe(false); });
   });
   it('turn a list loose when its items hold content a tight list cannot', () => {
     const doc = build([e => e.commands.toggleBulletList(), e => e.commands.insertContent('one'), e => e.commands.splitBlock(), e => e.commands.insertContent('two paragraphs')]);

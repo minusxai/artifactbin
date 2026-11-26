@@ -16,8 +16,8 @@ import { parse } from '../display';
 import { ENTITY_SAMPLES } from './samples';
 
 /**
- * Gzipped bytes, measured 2026-11-26: display 38,668 (29,696 with Prism's grammars stubbed out; 67,609 with
- * markdown-it's full entity table), editor 175,374 (prosemirror-view, @tiptap/core and markdown-it the most).
+ * Gzipped bytes, measured 2026-11-26: display 38,687 (29,714 with Prism's grammars stubbed out; 67,626 with
+ * markdown-it's full entity table), editor 175,391 (prosemirror-view, @tiptap/core and markdown-it the most).
  */
 const DISPLAY_GZIP_BUDGET = 40 * 1024;
 const EDITOR_GZIP_BUDGET = 180 * 1024;

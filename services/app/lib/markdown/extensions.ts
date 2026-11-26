@@ -174,7 +174,7 @@ function imageNode(address: MarkdownEditorOptions['imageAddress']) {
     }],
     renderHTML: ({ node }) => {
       const src = String(node.attrs.src ?? '');
-      const shown = address ? address(src) : src;
+      const shown = !imageAllowed(src) ? null : address ? address(src) : src;
       return ['img', { src: typeof shown === 'string' ? shown : null, alt: node.attrs.alt ?? '', title: node.attrs.title, loading: 'lazy' }];
     },
     addNodeView: () => (address ? ({ node }) => {
@@ -187,6 +187,7 @@ function imageNode(address: MarkdownEditorOptions['imageAddress']) {
         img.setAttribute('loading', 'lazy');
         if (src === shownSource) return;
         shownSource = src;
+        if (!imageAllowed(src)) { img.removeAttribute('src'); return; }
         const shown = address(src);
         if (typeof shown === 'string') img.setAttribute('src', shown);
         else void shown.then(value => { if (shownSource === src) img.setAttribute('src', value); }, () => undefined);

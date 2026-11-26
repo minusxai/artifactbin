@@ -42,6 +42,24 @@ function renderTokens(tokens: readonly (string | PrismToken)[]): string {
   }).join('');
 }
 
+/** Render code as inert escaped text using only the explicitly bundled Prism grammars. */
+export function renderCodeBlock(source: string, language?: string | null): string {
+  const canonical = normalizeLanguage(language);
+  if (!canonical || source.length > MAX_HIGHLIGHT_CODE_LENGTH) {
+    return `<pre><code>${escapeHtml(source)}</code></pre>`;
+  }
+
+  try {
+    const grammarName = canonical === 'html' ? 'html' : canonical;
+    const grammar = Prism.languages[grammarName] as PrismGrammar | undefined;
+    if (!grammar) return `<pre><code>${escapeHtml(source)}</code></pre>`;
+    const tokens = Prism.tokenize(source, grammar) as (string | PrismToken)[];
+    return `<pre><code class="language-${canonical}" data-language="${canonical}">${renderTokens(tokens)}</code></pre>`;
+  } catch {
+    return `<pre><code>${escapeHtml(source)}</code></pre>`;
+  }
+}
+
 /** The language renderCodeBlock marks `source` with (`class="language-<x>"`), without tokenizing it; null for plain text. */
 export function codeBlockLanguage(source: string, language?: string | null): string | null {
   const canonical = normalizeLanguage(language);
@@ -49,23 +67,16 @@ export function codeBlockLanguage(source: string, language?: string | null): str
 }
 
 interface Highlighted { language: string; tokens: (string | PrismToken)[] }
-/** The canonical language and the grammar's tokens, or null when the code is written as plain text. */
+/** renderCodeBlock's decision, for the editor: the canonical language and the grammar's tokens, or null for plain text. */
 function highlighted(source: string, language?: string | null): Highlighted | null {
   const canonical = normalizeLanguage(language);
   if (!canonical || source.length > MAX_HIGHLIGHT_CODE_LENGTH) return null;
   try {
-    const grammar = Prism.languages[canonical] as PrismGrammar | undefined;
+    const grammar = Prism.languages[canonical === 'html' ? 'html' : canonical] as PrismGrammar | undefined;
     return grammar ? { language: canonical, tokens: Prism.tokenize(source, grammar) as (string | PrismToken)[] } : null;
   } catch {
     return null;
   }
-}
-
-/** Render code as inert escaped text using only the explicitly bundled Prism grammars. */
-export function renderCodeBlock(source: string, language?: string | null): string {
-  const code = highlighted(source, language);
-  if (!code) return `<pre><code>${escapeHtml(source)}</code></pre>`;
-  return `<pre><code class="language-${code.language}" data-language="${code.language}">${renderTokens(code.tokens)}</code></pre>`;
 }
 
 export interface CodeHighlight {

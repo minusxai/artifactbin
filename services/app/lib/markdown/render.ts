@@ -19,6 +19,7 @@
  */
 import { escapeHtml, escapeText } from '@artifactbin/utils/escape';
 import { renderCodeBlock } from './code-block';
+import { imageAllowed, linkAllowed } from './href';
 import type { AsyncRenderOptions, MarkdownDoc, MarkdownMark, MarkdownNode, RenderOptions } from './types';
 
 interface State { options: RenderOptions; heading: number }
@@ -28,8 +29,9 @@ const MARK_TAGS = { bold: 'strong', italic: 'em', strike: 's', code: 'code', lin
 
 function openMark(mark: MarkdownMark, state: State): string {
   if (mark.type !== 'link') return `<${MARK_TAGS[mark.type]}>`;
-  const href = mark.attrs?.href ?? '';
-  return `<a${attr('href', href)}${attr('title', mark.attrs?.title)}${attr('data-mx-link', state.options.classifyLink?.(href))}>`;
+  // parse never keeps a refused address; a document from elsewhere loses it here, as in the editor.
+  const href = linkAllowed(mark.attrs?.href ?? '') ? mark.attrs!.href : null;
+  return `<a${attr('href', href)}${attr('title', mark.attrs?.title)}${attr('data-mx-link', href === null ? null : state.options.classifyLink?.(href))}>`;
 }
 
 /** Inline nodes, keeping a mark's element open across neighbours that share it (as ProseMirror's view does). */
@@ -46,7 +48,8 @@ function inline(nodes: readonly MarkdownNode[], state: State): string {
     else if (node.type === 'hardBreak') out += '<br>';
     else if (node.type === 'image') {
       const src = String(node.attrs?.src ?? '');
-      out += `<img${attr('src', state.options.imageAddress ? state.options.imageAddress(src) : src)}${attr('alt', node.attrs?.alt ?? '')}${attr('title', node.attrs?.title)} loading="lazy">`;
+      const shown = !imageAllowed(src) ? null : state.options.imageAddress ? state.options.imageAddress(src) : src;
+      out += `<img${attr('src', shown)}${attr('alt', node.attrs?.alt ?? '')}${attr('title', node.attrs?.title)} loading="lazy">`;
     }
   }
   while (open.length) out += `</${MARK_TAGS[open.pop()!.type]}>`;
@@ -56,7 +59,7 @@ function inline(nodes: readonly MarkdownNode[], state: State): string {
 const ALIGNS = new Set(['left', 'center', 'right']);
 function block(node: MarkdownNode, state: State): string {
   const children = () => (node.content ?? []).map(child => block(child, state)).join('');
-  const tight = node.attrs?.tight ? ' data-tight="true"' : '';
+  const tight = node.attrs?.tight !== false ? ' data-tight="true"' : '';
   switch (node.type) {
     case 'paragraph': return `<p>${inline(node.content ?? [], state)}</p>`;
     case 'heading': {

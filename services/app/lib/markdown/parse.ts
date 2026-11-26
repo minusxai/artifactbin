@@ -283,7 +283,8 @@ export function parse(markdown: string, options: ParseOptions = {}): MarkdownDoc
         parent.splice(parent.length - 1, 1, ...groups(list));
         break;
       }
-      case 'ordered_list_close': case 'blockquote_close': case 'table_close': case 'tr_close': stack.pop(); break;
+      case 'blockquote_close': { const quote = stack.pop()!; if (!quote.content!.length) quote.content!.push({ type: 'paragraph' }); break; }
+      case 'ordered_list_close': case 'table_close': case 'tr_close': stack.pop(); break;
       case 'fence': case 'code_block': {
         const language = md.utils.unescapeAll(token.info).trim().split(/\s+/)[0] || null;
         const text = token.content.replace(/\n$/, '');
