@@ -437,11 +437,11 @@ describe('trusted-issuer sign-in', () => {
     expect(response.status).toBe(303);
     const session = await auth.sessions.resolve(new Request(BASE, { headers: { cookie: cookieOf(response) } }));
     expect(session).toMatchObject({ email: 'user_1@issuer-a.trusted-issuer.invalid', emailVerified: true });
-    // Not remembered: the session cookie ends with the browser, and the server expiry is one day, never extended.
+    // Remembered, as any other sign-in: a seven-day cookie and server expiry, rolled forward while in use.
     const sessionCookie = response.headers.getSetCookie().find((c) => /session_token=/.test(c))!;
-    expect(sessionCookie).not.toMatch(/max-age|expires/i);
+    expect(sessionCookie).toMatch(/Max-Age=604800/);
     const [stored] = await rows<{ expiresAt: Date }>(`SELECT "expiresAt" FROM auth.session WHERE "userId"=$1`, [session!.userId]);
-    expect(new Date(stored!.expiresAt).getTime()).toBeLessThanOrEqual(Date.now() + 86_400_000 + 5_000);
+    expect(new Date(stored!.expiresAt).getTime()).toBeGreaterThan(Date.now() + 6 * 86_400_000);
     const [person] = await rows<{ id: string; username: string; welcome_pending: boolean; name: string }>(`SELECT id,username,welcome_pending,name FROM auth.users WHERE id=$1`, [session!.userId]);
     // Without a name claim, a new handle person is named by their handle.
     expect(person).toMatchObject({ username: 'user_1', welcome_pending: false, name: 'user_1' });
