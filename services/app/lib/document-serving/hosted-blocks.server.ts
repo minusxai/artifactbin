@@ -9,8 +9,9 @@
  *   /af/v1/components/<digest>/<file>   one build's public components and the chunks they import, as one retained
  *                                       bundle (sha256 of its canonical JSON): relative chunk imports resolve inside it
  *   /af/v1/styles/<sha256>.css          the whole platform stylesheet, or one design system's
- *   /af/v1/host/<sha256>.js             the document host module (lib/html-reader/host-shell), and the host comments
- *                                       module it imports by this address when a shell asks for comments
+ *   /af/v1/host/<sha256>.js             the document host module (lib/html-reader/host-shell), the host comments
+ *                                       module it imports by this address when a shell asks for comments, and the
+ *                                       code highlighter (lib/markdown/code-block) the comments import the same way
  *   /af/v1/runtime/<sha256>/<file>.js   this build's runtime modules (lib/html-runtime runtimeModuleFile), which a served
  *                                       page names; an older digest redirects to the flat /af/<file>.js (not retained)
  *   /af/fonts/<name>.woff2              already immutable: a font name never changes its bytes
@@ -23,7 +24,7 @@
 import { createHash } from 'node:crypto';
 import { publicComponentFiles } from '@/lib/libraries/server';
 import { hostedComponentEntries } from '@/lib/libraries';
-import { buildHtmlAssets, hostCommentsPath, createSourceRetention, retainedPublicAssets, runtimeModuleFile, type SourceRetention } from '@/lib/html-runtime/server';
+import { buildHtmlAssets, hostModulePath, createSourceRetention, retainedPublicAssets, runtimeModuleFile, type SourceRetention } from '@/lib/html-runtime/server';
 import { PLATFORM_FONTS_PATH, THEME_ATTRIBUTES, THEME_TOKENS, OPTIONAL_THEME_TOKENS, defaultHtmlSystem, designSystemsManifest, htmlSystemNames, htmlSystemsCss, installationDesignSystem } from '@/lib/html-systems';
 import { matchingTag, publicRevalidatedResponse } from '@/lib/http';
 import { NO_STORE, PUBLIC_IMMUTABLE } from './cache-control';
@@ -57,7 +58,7 @@ async function blocks(): Promise<Blocks> {
   // by lib/libraries/components.server) follows them, so the manifest does too. The bundle is assembled only then.
   // The installation design system and the default (both registered at boot) are in the key too: the manifest names them.
   const installed = installationDesignSystem(), chosen = defaultHtmlSystem();
-  const key = sha256(JSON.stringify([files ? sorted(files).map(([name, file]) => [name, file.etag]) : null, assets.host ?? '', assets.hostComments ?? '', ...(installed ? [installed.rules] : []), ...(chosen ? [chosen] : [])]));
+  const key = sha256(JSON.stringify([files ? sorted(files).map(([name, file]) => [name, file.etag]) : null, assets.host ?? '', assets.hostComments ?? '', assets.hostCode ?? '', ...(installed ? [installed.rules] : []), ...(chosen ? [chosen] : [])]));
   if (current?.key === key) return current.blocks;
   const pending = (async (): Promise<Blocks> => {
     const text = files ? bundleText(files) : null;
@@ -66,7 +67,7 @@ async function blocks(): Promise<Blocks> {
     const retention = {
       components: createSourceRetention(text ? [text] : [], stores.components, sha256),
       styles: createSourceRetention(Object.values(sheets), stores.styles, sha256),
-      host: createSourceRetention([assets.host, assets.hostComments].filter((source): source is string => !!source), stores.host, sha256),
+      host: createSourceRetention([assets.host, assets.hostComments, assets.hostCode].filter((source): source is string => !!source), stores.host, sha256),
     };
     const bundle = text ? { digest: sha256(text), files: (JSON.parse(text) as { files: Record<string, string> }).files } : null;
     const hashes: Record<string, string> = {};
@@ -80,8 +81,10 @@ async function blocks(): Promise<Blocks> {
     }
     const host = assets.host ? `/af/v1/host/${sha256(assets.host)}.js` : null;
     if (host) hashes[host] = integrity(assets.host!);
-    const hostComments = assets.hostComments ? hostCommentsPath(assets.hostComments) : null;
+    const hostComments = assets.hostComments ? hostModulePath(assets.hostComments) : null;
     if (hostComments) hashes[hostComments] = integrity(assets.hostComments!);
+    const hostCode = assets.hostCode ? hostModulePath(assets.hostCode) : null;
+    if (hostCode) hashes[hostCode] = integrity(assets.hostCode!);
     const manifest = JSON.stringify({
       version: 1,
       components,
@@ -90,6 +93,7 @@ async function blocks(): Promise<Blocks> {
       fonts: PLATFORM_FONTS_PATH,
       ...(host ? { host } : {}),
       ...(hostComments ? { hostComments } : {}),
+      ...(hostCode ? { hostCode } : {}),
       theme: { attributes: THEME_ATTRIBUTES, tokens: THEME_TOKENS, optionalTokens: OPTIONAL_THEME_TOKENS },
       integrity: hashes,
     });
