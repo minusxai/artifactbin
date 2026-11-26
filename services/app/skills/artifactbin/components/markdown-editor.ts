@@ -11,7 +11,7 @@
  *   <af-markdown-editor default-value="## Revenue&#10;Net of discounts."></af-markdown-editor>
  * Gotchas: Markdown mode edits exact source. Reflect your value back for controlled use. Visual
  *   edits normalize Markdown spelling. Pasted text reads as Markdown (Mod-Shift-V pastes it as
- *   typed). HTML stays literal. Images take an https, relative or ref:<id> address; no upload.
+ *   typed). HTML stays literal. Images take an https or relative address; no upload.
  */
 import type { Editor } from '@tiptap/core';
 import type { EditorState } from 'prosemirror-state';

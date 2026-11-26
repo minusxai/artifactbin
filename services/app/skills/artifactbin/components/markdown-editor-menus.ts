@@ -1,8 +1,8 @@
 /**
  * Internal: af-markdown-editor's toolbar panels. Table: insert a chosen grid, or add and delete
- * rows, columns and the table at the caret. Image: insert one by address (https, relative or an
- * upload's ref:<id>) and alt text, or change or delete the selected one; Markdown has no image
- * size. Used by markdown-editor.ts; each field keeps its own panels and labels.
+ * rows, columns and the table at the caret. Image: insert one by address (https or relative)
+ * and alt text, or change or delete the selected one; Markdown has no image size.
+ * Used by markdown-editor.ts; each field keeps its own panels and labels.
  */
 import { NodeSelection, type Command, type EditorState } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
@@ -140,7 +140,7 @@ export function imageMenu(toolbar: HTMLElement, frame: HTMLElement, id: string, 
   const submit = () => {
     const src = address.input.value.trim();
     address.input.setCustomValidity(src && imageAllowed(src) ? '' :
-      'Use an https address, a relative address or ref:<id>');
+      'Use an https or relative address');
     if (address.input.reportValidity()) menu.run((state, dispatch) => {
       const image = selectedImage(state);
       const attrs = { ...image?.node.attrs, src, alt: alt.input.value };

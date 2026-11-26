@@ -157,6 +157,43 @@ describe('what the field kept', () => {
     const copied = editor.view.serializeForClipboard(editor.state.doc.slice(0, editor.state.doc.content.size));
     expect([...copied.dom.querySelectorAll('a')].map(link => link.getAttribute('href'))).toEqual(['tel:+15551234', '/docs']);
   });
+  it('applies every toolbar button to the selection', () => {
+    // jsdom has no layout; the toolbar's commands scroll the caret into view.
+    Range.prototype.getClientRects = () => [] as unknown as DOMRectList;
+    Range.prototype.getBoundingClientRect = () => new DOMRect();
+    const expected: Record<string, string> = { h1: '# Text', h2: '## Text', h3: '### Text', bold: '**Text**', italic: '*Text*', strike: '~~Text~~', code: '`Text`',
+      bullet: '- Text', ordered: '1. Text', task: '- [ ] Text', quote: '> Text', 'code-block': '```\nText\n```', rule: '---' };
+    const keys = [...field({}).element.querySelectorAll<HTMLButtonElement>('.af-md-toolbar>button[data-key]')].map(item => item.dataset.key!);
+    expect(keys).toEqual([...Object.keys(expected), 'table', 'image']);
+    for (const [key, value] of Object.entries(expected)) {
+      const { changes, editor, button } = field({ 'default-value': 'Text' });
+      editor.commands.focus(); editor.commands.selectAll(); button(key).click();
+      expect(changes.at(-1), key).toBe(value);
+      expect(button(key).getAttribute('aria-pressed'), key).toBe(key === 'rule' ? null : 'true');
+    }
+  });
+  it('leaves Mod-Enter outside code and task items to the page, and Mod-Alt-2 keeps a level 2 heading', () => {
+    const { changes, editor } = field({ 'default-value': '## Title' });
+    caretIn(editor, 'Title');
+    expect(press(editor, 'Mod-Enter')).toBe(false);
+    press(editor, 'Mod-Alt-2'); expect(changes).toEqual([]);
+    press(editor, 'Mod-Alt-3'); expect(changes).toEqual(['### Title']);
+  });
+  it('keeps the spaces around pasted text, and takes Shift+Insert as an ordinary paste', () => {
+    const { editor, changes } = field({ 'default-value': 'See it' });
+    const paste = (text: string) => {
+      const event = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+      Object.defineProperty(event, 'clipboardData', { value: { getData: (type: string) => (type === 'text/plain' ? text : '') } });
+      editor.view.dom.dispatchEvent(event);
+    };
+    caretIn(editor, ' it'); paste(' and **more**');
+    expect(changes.at(-1)).toBe('See and **more** it');
+    caretIn(editor, 'See'); paste('So ');
+    expect(changes.at(-1)).toBe('So See and **more** it');
+    editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Insert', keyCode: 45, shiftKey: true }));
+    editor.commands.focus('end'); paste('\n\n| a |\n| --- |\n| b |');
+    expect(changes.at(-1)).toBe('So See and **more** it\n\n| a |\n| --- |\n| b |');
+  });
   it('has history, the gap cursor and the drop cursor', () => {
     const names = field({}).editor.extensionManager.extensions.map(extension => extension.name);
     expect(names).toEqual(expect.arrayContaining(['gapCursor', 'dropCursor', 'markdownFieldBehaviour']));

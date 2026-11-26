@@ -1,9 +1,7 @@
 /**
- * Internal: af-markdown-editor's toolbar actions, history, keys and Markdown typing rules (`# `,
- * ``` , `> `, `- `, `1. `, `[ ] `, `---`; **b**, *i*, _i_, ~~s~~, `c`; never inside code) on the
- * shared Tiptap elements, whose own typing and paste rules are off. Shift-Enter breaks a line,
- * in a table cell too; in a table Tab, Shift-Tab and Enter move by cell.
- * Used by: markdown-editor.ts.
+ * Internal: af-markdown-editor's toolbar, history, keys and typing rules (`# `, ``` , `> `, `- `,
+ * `1. `, `[ ] `, `---`, **b**, *i*, _i_, ~~s~~, `c`; never in code) on the shared Tiptap
+ * elements, whose own typing and paste rules are off. Used by: markdown-editor.ts.
  */
 import { Editor, Extension, type EditorOptions } from '@tiptap/core';
 import type { MarkType, Node as ProseNode, Schema } from 'prosemirror-model';
@@ -19,7 +17,7 @@ import { inTable, moveCell, tableFocus } from './markdown-editor-table-commands'
 export interface EditorAction { key: string; label: string; title: string;
   run(editor: Editor): boolean; active?(editor: Editor): boolean; block?: boolean }
 
-/** A button for `toggle<Node>` (toggleBold, toggleBulletList, ...), on where `node` is. */
+/** A button for `toggle<Node>` (toggleBold, ...), on where `node` is. */
 const toggle = (key: string, label: string, title: string, node: string, block = true) =>
   ({ key, label, title, block, active: (editor: Editor) => editor.isActive(node),
     run: (editor: Editor) => (editor.commands as unknown as Record<string, () => boolean>)[
@@ -102,7 +100,7 @@ const typingRules = (schema: Schema) => {
   ] });
 };
 
-/** History, typing rules, table repair, paste and keys, above the elements' own keys. */
+/** Above the elements' own keys; in a table Tab, Shift-Tab and Enter move by cell. */
 const FieldBehaviour = Extension.create({
   name: 'markdownFieldBehaviour',
   priority: 1000,
@@ -115,6 +113,8 @@ const FieldBehaviour = Extension.create({
     return {
       'Mod-z': () => run(undo), 'Shift-Mod-z': () => run(redo), 'Mod-y': () => run(redo),
       'Ctrl-e': () => editor.commands.selectTextblockEnd(),
+      ...Object.fromEntries(([1, 2, 3] as const).map(level =>
+        [`Mod-Alt-${level}`, () => editor.commands.setHeading({ level })])),
       'Mod-Shift-e': () => editor.commands.toggleCode(),
       // Tiptap's setHardBreak refuses an isolating parent, which a table cell is.
       'Shift-Enter': () => inTable(editor.state) ? run((state, dispatch) => {
@@ -123,7 +123,6 @@ const FieldBehaviour = Extension.create({
         return true;
       }) : editor.commands.setHardBreak(),
       Enter: () => run(moveCell('down')),
-      // Outside a table, list items' own keys nest them.
       Tab: () => run(moveCell('next')),
       'Shift-Tab': () => run(moveCell('previous')),
     };
