@@ -26,7 +26,7 @@ const APP = 'https://app.example.test';
 const sri = (body: string | Buffer) => `sha384-${createHash('sha384').update(body).digest('base64')}`;
 const sha256 = (body: string) => createHash('sha256').update(body).digest('hex');
 interface Manifest {
-  version: number; components: Record<string, string>; styles: string; host: string; hostComments: string; fonts: string;
+  version: number; components: Record<string, string>; styles: string; host: string; hostComments: string; hostCode: string; fonts: string;
   designSystems: Record<string, { label: string; defaultMode: string; styles: string }>;
   theme: { attributes: Record<string, string>; tokens: string[]; optionalTokens: string[] }; integrity: Record<string, string>;
 }
@@ -95,6 +95,13 @@ it('names every public component, the stylesheets and the host module at immutab
   expect(commentsSource).toContain('mountHostComments');
   expect(m.integrity[m.hostComments]).toBe(sri(commentsSource));
   expect(hostSource).toContain(m.hostComments);
+  // Its code highlighter: pinned in the same retention, at the address the comments module imports.
+  const code = await pinned(m.hostCode);
+  expect(code.status).toBe(200);
+  const codeSource = await code.text();
+  expect(codeSource).toContain('renderCodeBlock');
+  expect(m.integrity[m.hostCode]).toBe(sri(codeSource));
+  expect(commentsSource).toContain(m.hostCode);
 });
 
 it('names the installation design system as the default, first, with its sheet pinned, and drops it when unset', async () => {

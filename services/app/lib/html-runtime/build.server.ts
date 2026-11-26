@@ -1,7 +1,7 @@
 import {buildHostComments,buildPortableChrome} from './build-portable-chrome.server';
 import {slimEntities} from './slim-entities.server';
 import {suppliedOrCompiled} from './assets-supply.server';
-import {hostCommentsPath} from './host-comments-address.server';
+import {hostModulePath} from './host-comments-address.server';
 import {build,type PluginBuild,type Plugin} from 'esbuild';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
@@ -66,9 +66,11 @@ async function compile():Promise<HtmlRuntimeAssets>{
  // a page, so it has no import-map entry and no skew guard (no core runs beside it); the manifest pins it by digest.
  // Its discussion (the host comments module, ./build-portable-chrome) is a module of its own the host module imports only
  // when a shell asks for comments; the host module names that build's pinned address (/af/v1/host/<sha256>.js, kept by
- // the same retention), so a pinned host module always loads the comments it was built with.
- const hostComments=await buildHostComments();
- const host=await esm(new URL('../html-reader/host-shell.ts',import.meta.url),{define:{__AF_HOST_COMMENTS__:JSON.stringify(hostCommentsPath(hostComments))}});
+ // the same retention), so a pinned host module always loads the comments it was built with. The comments import their
+ // code highlighter (lib/markdown/code-block, the host code module) by its pinned address the same way.
+ const hostCode=await esm(new URL('../markdown/code-block.ts',import.meta.url));
+ const hostComments=await buildHostComments(hostModulePath(hostCode));
+ const host=await esm(new URL('../html-reader/host-shell.ts',import.meta.url),{define:{__AF_HOST_COMMENTS__:JSON.stringify(hostModulePath(hostComments))}});
  const chrome=await buildPortableChrome();
  // D17: a served page names each module at this build's content address (config.modules), others at the flat address
  // revalidated by ETag. A page open across a deploy can load a newer lazy module against its older core (an old content
@@ -128,5 +130,5 @@ installPageFetch(window,config.files,!config.offline&&Array.isArray(config.conne
 if(config.offline&&window.parent===window){void import(reader).then(module=>module.startPortableDocument(window,config.publishOrigin)).catch(()=>document.documentElement.setAttribute('data-af-connection','unavailable'));}
 if(live){installHtmlReaderCommands(window,config.appOrigin);openFrameDoor(window,config.appOrigin,()=>import(reader));}`;
  const core=await bundled({stdin:{contents:entry,resolveDir:process.cwd(),loader:'ts'},format:'iife'},'HTML core is empty');
- return {core,systems:htmlSystemsCss(HTML_SYSTEM_NAMES),...guarded,...RUNTIME_MODULE_PATHS,host,hostComments};
+ return {core,systems:htmlSystemsCss(HTML_SYSTEM_NAMES),...guarded,...RUNTIME_MODULE_PATHS,host,hostComments,hostCode};
 }

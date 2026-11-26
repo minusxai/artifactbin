@@ -106,7 +106,9 @@ export interface HtmlRuntimeAssets { core:string; apollo:string; apolloPath:stri
  /** The document host module (lib/html-reader/host-shell) at /af/host.js: a shell's, never a page's, so it has no RUNTIME_MODULE_PATHS entry. */
  host?:string;
  /** The host comments module (solid/document/browser-host-comments) the host module imports when a shell asks for comments. */
- hostComments?:string }
+ hostComments?:string;
+ /** The host code module (lib/markdown/code-block: Prism and its grammars) the host comments module imports by its pinned address. */
+ hostCode?:string }
 /**
  * D17: the platform runtime's flat public addresses (core: lib/html-page/core-script), strong ETag and `no-cache`. A
  * served page names this build's copies at `/af/v1/runtime/<sha256>/<file>` instead (`modules`), immutable; another

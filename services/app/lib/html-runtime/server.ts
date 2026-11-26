@@ -5,7 +5,7 @@ export type { SourceRetention } from './asset-retention-contract';
 export { retainedPublicAssets } from './asset-retention.server';
 export { buildHtmlAssets } from './build.server';
 export { supplyHtmlAssets, type HtmlAssetsSupply } from './assets-supply.server';
-export { hostCommentsPath } from './host-comments-address.server';
+export { hostModulePath } from './host-comments-address.server';
 /** Whether a served page already carries the source annotations' observation (the frame's own, ./bridge). */
 export { hasImportedSourceObservation } from './bridge/imported-observation';
 export { runtimeModuleAddresses, runtimeModuleFile } from './runtime-addresses.server';

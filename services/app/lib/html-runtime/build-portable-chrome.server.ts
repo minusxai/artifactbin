@@ -50,19 +50,18 @@ export async function buildPortableChrome():Promise<string>{
  return buildTrustedModule(new URL('../../solid/document/browser-portable-chrome.tsx',import.meta.url).href,'mountPortableChrome',stylesheet);
 }
 /**
- * lib/markdown's Prism grammars as none: code renders as plain `<pre><code>` and the editor decorates nothing. The host
- * comments module is one file (no lazy chunk can stay out of it), and with lib/markdown's parser and serializer, which
- * comments read and write through, Prism (about 9 KB gzipped) no longer fits its budget (build.test.ts). The app's own
- * comments keep highlighting: there Prism is a lazy chunk.
+ * lib/markdown's highlighter (./code-block: Prism and its grammars) as the pinned host code module at `codePath`
+ * (./build.server), imported by address rather than bundled. The host comments module is one file (no lazy chunk can
+ * stay out of it), and with lib/markdown's parser and serializer Prism (about 9 KB gzipped) no longer fits its budget
+ * (build.test.ts); the comments' code still renders and edits highlighted, as the app's do.
  */
-const noCodeGrammars:Plugin={name:'no-code-grammars',setup(builder){
- builder.onResolve({filter:/^\.\/prism-grammars$/},({importer})=>/[\\/]lib[\\/]markdown[\\/]/.test(importer)?{path:'prism-grammars',namespace:'no-code-grammars'}:undefined);
- builder.onLoad({filter:/.*/,namespace:'no-code-grammars'},()=>({contents:'export default {languages:{},tokenize:()=>[]};',loader:'js'}));
-}};
+const hostCode=(codePath:string):Plugin=>({name:'host-code',setup(builder){
+ builder.onResolve({filter:/^\.\/code-block$/},({importer})=>/[\\/]lib[\\/]markdown[\\/]/.test(importer)?{path:codePath,external:true}:undefined);
+}});
 /**
  * The host comments module: the app's sheet without fonts (a shell on the app's origin loads `/af/fonts` faces itself,
- * and a shell that sets the theme tokens names its own families), and no code highlighting (noCodeGrammars above).
+ * and a shell that sets the theme tokens names its own families), importing its highlighter from `codePath` (hostCode above).
  */
-export async function buildHostComments():Promise<string>{
- return buildTrustedModule(new URL('../../solid/document/browser-host-comments.tsx',import.meta.url).href,'mountHostComments',await appStylesheet(),[noCodeGrammars]);
+export async function buildHostComments(codePath:string):Promise<string>{
+ return buildTrustedModule(new URL('../../solid/document/browser-host-comments.tsx',import.meta.url).href,'mountHostComments',await appStylesheet(),[hostCode(codePath)]);
 }

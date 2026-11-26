@@ -30,7 +30,8 @@ only frame the app page `/a/<id>` (its origin must be in the deployment's truste
 - `styles`: every design system in one sheet; `designSystems.<name>.styles`: one system's sheet
   (`label`, `defaultMode` light or dark; `dark: false`: light only, keep `data-af-dark` false).
   `defaultDesignSystem`: this server's default system, when it has one. Fonts load from `fonts`.
-- `host`: the document host module (second example); `hostComments`, the comments it loads.
+- `host`: the document host module (second example); `hostComments`, the comments it loads;
+  `hostCode`, their code highlighter.
 - `theme`: `attributes` and `tokens`, the contract below. URLs are paths on the manifest's origin.
 
 A design system applies when `<html>` carries `data-af-design-system="NAME"` and

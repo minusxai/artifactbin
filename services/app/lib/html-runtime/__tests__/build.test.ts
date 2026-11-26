@@ -3,7 +3,7 @@ import {gzipSync} from 'node:zlib';
 import {fileURLToPath} from 'node:url';
 import { expect, it } from 'vitest';
 import { buildHtmlCore,buildHtmlAssets } from '../build.server';
-import { hostCommentsPath } from '../host-comments-address.server';
+import { hostModulePath } from '../host-comments-address.server';
 import { downloadableHtml,assembleHtmlPage } from '../index';
 import { DRAFT_SQL_ENGINE_PATH, RUNTIME_MODULE_PATHS } from '../contract';
 import { PLATFORM_STYLES_PATH } from '../../html-systems';
@@ -345,13 +345,19 @@ it('ships the host comments module apart, at the pinned address the host module 
  // (243,000 B gzipped measured 2026-11-11, the comment editor most of it).
  expect(gzipSync(comments).byteLength).toBeLessThanOrEqual(256*1024);
  // Comments read and write Markdown through lib/markdown (parse, the HTML writer, the serializer; 257,792 B gzipped
- // measured 2026-11-26), and in this one file nothing can be a lazy chunk: lib/markdown's Prism grammars stay out
- // (build-portable-chrome.server noCodeGrammars), so code shows unhighlighted here (the app keeps highlighting), and
- // the full entity table stays out (the slim decoder decodes a rare name as typed).
+ // measured 2026-11-26), and in this one file nothing can be a lazy chunk: lib/markdown's highlighter is the host code
+ // module, imported by its pinned address (build-portable-chrome.server hostCode), and the full entity table stays out
+ // (the slim decoder decodes a rare name as typed).
  expect(comments).not.toContain('template-string');
+ const code=assets.hostCode!;
+ expect(comments).toContain(hostModulePath(code));
+ expect(code).toContain('template-string');
+ expect(code).toMatch(/export\s*\{[^}]*renderCodeBlock/);
+ expect(code).not.toMatch(/mountHostComments|ProseMirror/);
+ expect(gzipSync(code).byteLength).toBeLessThanOrEqual(16*1024);
  expect(comments).not.toContain('CounterClockwiseContourIntegral');
  // The host module imports exactly this build's comments, never bundles them.
- expect(assets.host).toContain(hostCommentsPath(comments));
+ expect(assets.host).toContain(hostModulePath(comments));
  expect(assets.host).not.toMatch(/data-trusted-ui|ProseMirror/);
  expect(assets.core).not.toContain('host-comments');
  expect(comments).not.toContain('afbin:runtime-reload');
