@@ -294,6 +294,16 @@ it('review: a pre-deploy import map can reach the skew guard and reload on a lat
  expect(result.stdout).toContain('reloaded=true');
 });
 
+it('the paste parser is lib/markdown\'s display parse with its slim entity decoder, and no ProseMirror',async()=>{
+ const assets=await buildHtmlAssets();
+ // 68,537 B gzipped on prosemirror-markdown with the full entity table; 37,801 B on lib/markdown (measured 2026-11-26).
+ expect(gzipSync(assets.nativeMarkdown!).byteLength).toBeLessThanOrEqual(100*1024);
+ expect(assets.nativeMarkdown).not.toContain('ProseMirror');
+ const module=await import(`data:text/javascript;base64,${Buffer.from(assets.nativeMarkdown!).toString('base64')}`) as typeof import('../native-region-markdown');
+ // The slim decoder leaves a rare name as typed (the full table would decode it to α), as in every build of lib/markdown.
+ expect(module.nativeMarkdownJson('&alpha; &amp; ~~s~~')).toEqual({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:'&alpha; & s'}]}]});
+});
+
 it('loads the native trial in a separate module without server HTML parsers',async()=>{
  const assets=await buildHtmlAssets();
  expect(assets.nativeRegionsPath).toBe('/af/native-regions.js');

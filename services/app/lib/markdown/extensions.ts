@@ -93,9 +93,16 @@ let highlighter: typeof CodeHighlighter | null = null;
 let loading: Promise<void> | null = null;
 const waiting = new Set<EditorView>();
 const HIGHLIGHTER_LOADED = 'markdownCodeHighlighterLoaded';
+/**
+ * Who loads Prism: ./highlight.ts sets this when the editor entry is imported. Code that only builds the schema or
+ * saves (./save.ts, documents' Markdown export on the server) never sets it, so it never reaches Prism or its timers.
+ */
+export const highlightLoader: { load: (() => Promise<typeof import('./code-block')>) | null } = { load: null };
 /** Load the highlighter now (an editor does this itself on its first highlightable code block). */
 export function loadCodeHighlighting(): Promise<void> {
-  loading ??= import('./code-block').then(module => {
+  const load = highlightLoader.load;
+  if (!load) return Promise.resolve();
+  loading ??= load().then(module => {
     highlighter = module.codeHighlight;
     for (const view of waiting) if (!view.isDestroyed) view.dispatch(view.state.tr.setMeta(HIGHLIGHTER_LOADED, true).setMeta('addToHistory', false));
   }, () => undefined);

@@ -176,7 +176,7 @@ const BUNDLED_LEAVES = {
   ],
   'lib/local-connection': ['browser'],
   // `editing` is the editing behaviour the Markdown field and the document editor share (list indent, clipboard).
-  'lib/markdown': ['code-block', 'display', 'editing', 'editor'],
+  'lib/markdown': ['code-block', 'display', 'editing', 'editor', 'href', 'parse', 'save'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/html-systems': ['story-systems', 'story-themes', ],
   'lib/workspace': ['artifact-starters', 'breadcrumb', 'visibility-icons'],
@@ -256,10 +256,7 @@ export const PACKAGE_OWNERS = {
   },
   'prosemirror-markdown': {
     owner: 'lib/markdown',
-    importers: [
-      'services/app/lib/live-regions/markdown.ts', 'services/app/lib/live-regions/native-markdown.ts',
-      'services/app/lib/live-regions/source-html.ts',
-    ],
+    importers: ['services/app/lib/live-regions/markdown.ts', 'services/app/lib/live-regions/source-html.ts'],
   },
 };
 /** A lib module without a row: entered only through its index (rule 4's default). */

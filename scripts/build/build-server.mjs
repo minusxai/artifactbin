@@ -23,6 +23,7 @@ import {fileURLToPath} from 'node:url';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { EXTERNALS } from './runtime-externals.mjs';
 import { prebuiltHtmlCore, prebuiltPreviewAssets } from './html-core.mjs';
+import { slimEntitiesEsbuild } from '../lib/slim-entities.mjs';
 
 const out = process.argv[2] ?? 'dist/server.mjs';
 const entry = process.argv[3] ?? 'server.ts';
@@ -35,7 +36,8 @@ await esbuild.build({
   target: 'node22',
   outfile: out,
   external: [...EXTERNALS, ...process.argv.slice(4).filter(arg=>!arg.startsWith('--'))],
-  plugins: [prebuiltHtmlCore(fileURLToPath(new URL('../../',import.meta.url))),prebuiltPreviewAssets(fileURLToPath(new URL('../../',import.meta.url)))],
+  // markdown-it's entity table resolves to lib/markdown's slim decoder (documents' Markdown reads and writes parse here).
+  plugins: [slimEntitiesEsbuild(),prebuiltHtmlCore(fileURLToPath(new URL('../../',import.meta.url))),prebuiltPreviewAssets(fileURLToPath(new URL('../../',import.meta.url)))],
   // `require` for the bundled CJS deps, under a name nothing else can collide
   // with: the app itself uses createRequire (lib/object-store, lib/mermaid-images/fonts
   // resolve packages that way), and a plain banner declared it twice — a SyntaxError at
