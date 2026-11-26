@@ -98,6 +98,10 @@ function offline({ cacheDir, provides }) {
     const left = debsToInstall(cached, installed());
     if (left.length >= pending.length) {
       console.log(`::warning::dpkg cannot install ${left.length} of the cached packages in ${cacheDir} (${left.slice(0, 5).join(', ')}): the set no longer fits this runner image (bump its cache key); installing from the mirror`);
+      // What this pass left unpacked but unconfigurable (a cached libegl-mesa0 pinning another libgbm1 than the image's,
+      // run 45899896083) would make the mirror's apt refuse everything as unmet dependencies: none of it was installed
+      // before, so it is removed again and the online command starts from the image as it was.
+      run(...asRoot('dpkg', ['--purge', '--force-depends', ...left.map(packageOfDeb)]));
       run(...asRoot('dpkg', ['--configure', '-a']));
       return false;
     }
