@@ -11,8 +11,7 @@ import { markdownExtensions, type MarkdownEditorOptions } from './extensions';
 
 export { parse } from './parse';
 export { markdownExtensions, EDITOR_ONLY_MARKUP, type MarkdownEditorOptions } from './extensions';
-export { serialize, type SerializeOptions } from './serialize';
-export type { MarkdownDoc, MarkdownNode, ParseOptions } from './types';
+export { serialize } from './serialize';
 
 /** The schema the extensions define, for serializing or checking a document without an editor. */
 export const markdownSchema = (options: MarkdownEditorOptions = {}): Schema => getSchema(markdownExtensions(options));

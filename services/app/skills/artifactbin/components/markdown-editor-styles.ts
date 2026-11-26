@@ -1,6 +1,7 @@
 /**
  * Internal: light-DOM stylesheet for af-markdown-editor: the field frame, toolbar and caret
- * surface, table tools and editable grid. Document type comes from markdown-styles.ts.
+ * surface, table and image tools, editable grid and the gap cursor (the editor injects no CSS).
+ * Document type comes from markdown-styles.ts.
  * Used by: markdown-editor.ts.
  */
 import { MARKDOWN_CSS } from './markdown-styles';
@@ -54,25 +55,28 @@ ${E} .af-md-editable[data-empty]::before{content:attr(data-placeholder);position
   `pointer-events:none;color:var(--muted-foreground,#737373)}
 ${E} .af-md-editable a{cursor:text}
 ${E} .af-md-editable .ProseMirror-selectednode{outline:2px solid var(--ring,#777)}
-${E} .af-md-table-wrap{box-sizing:border-box;max-width:100%;margin-block:.75em 1.25em;
+${E} .af-md-editable img.ProseMirror-separator{display:inline!important;border:none!important;` +
+  `margin:0!important}
+${E} .ProseMirror-gapcursor{display:none;pointer-events:none;position:absolute}
+${E} .ProseMirror-gapcursor:after{content:"";display:block;position:absolute;top:-2px;` +
+  `width:20px;border-top:1px solid currentColor}
+${E} .ProseMirror-focused .ProseMirror-gapcursor{display:block}
+${E} .mx-md-table-scroll{box-sizing:border-box;max-width:100%;margin-block:.75em 1.25em;
   overflow:auto;border:1px solid var(--border,#d9dce1);
   border-radius:var(--radius-md,calc(var(--radius,.625rem) - 2px));
   background:var(--background,#fff)}
-${E} .af-md-table-wrap table{display:table;width:100%;max-width:none;margin:0;
+${E} .mx-md-table-scroll table{display:table;width:100%;max-width:none;margin:0;
   border-collapse:separate;border-spacing:0;table-layout:auto;color:inherit}
-${E} .af-md-table-wrap table:has(tr>:nth-child(3)){min-width:36rem}
-${E} .af-md-table-wrap :is(th,td){box-sizing:border-box;min-width:7rem;
+${E} .mx-md-table-scroll table:has(tr>:nth-child(3)){min-width:36rem}
+${E} .mx-md-table-scroll :is(th,td){box-sizing:border-box;min-width:7rem;
   padding:.55rem .8rem;border:0;border-inline-end:1px solid var(--border,#d9dce1);
   border-block-end:1px solid var(--border,#d9dce1);vertical-align:top;
   text-align:start;line-height:1.55;overflow-wrap:anywhere}
-${E} .af-md-table-wrap td:has(>code:only-child){min-width:9rem}
-${E} .af-md-table-wrap th{background:var(--muted,#f3f4f6);font-weight:600;
+${E} .mx-md-table-scroll td:has(>code:only-child){min-width:9rem}
+${E} .mx-md-table-scroll th{background:var(--muted,#f3f4f6);font-weight:600;
   color:var(--foreground,#17191d)}
-${E} .af-md-table-wrap tr>:last-child{border-inline-end:0}
-${E} .af-md-table-wrap tr:last-child>*{border-block-end:0}
-${E} .af-md-table-wrap [data-align=left]{text-align:left}
-${E} .af-md-table-wrap [data-align=center]{text-align:center}
-${E} .af-md-table-wrap [data-align=right]{text-align:right}
+${E} .mx-md-table-scroll tr>:last-child{border-inline-end:0}
+${E} .mx-md-table-scroll tr:last-child>*{border-block-end:0}
 ${E} .ProseMirror-focused .af-md-active-cell{outline:2px solid var(--ring,#68788c);
   outline-offset:-2px}
 ${E} .af-md-table-trigger{display:inline-flex;align-items:center;gap:.35rem}

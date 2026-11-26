@@ -241,9 +241,8 @@ export const DEEP_MODULES = {
   // server.ts imports these two statically, before it reads configuration; the index loads lib/platform.
   'lib/runtime': { entries: ['', 'dev-vite', 'request-log'] },
   // The shared Markdown module's display (parse, renderHtml; af-markdown renders through it) and editor (Tiptap
-  // elements, serialize) entries; the editor waits for the surfaces (comments, the Markdown field, documents) that
-  // move onto it one change at a time.
-  'lib/markdown': { ...bundled('lib/markdown'), awaitingImporters: ['editor'] },
+  // elements, serialize; af-markdown-editor edits through it) entries.
+  'lib/markdown': bundled('lib/markdown'),
 };
 /**
  * Rule 6: the Markdown parser and serializer packages belong to lib/markdown, the one place Markdown is read and
@@ -252,14 +251,13 @@ export const DEEP_MODULES = {
 export const PACKAGE_OWNERS = {
   'markdown-it': {
     owner: 'lib/markdown',
-    importers: ['services/app/lib/html-components/markdown-editor-model.ts', 'services/app/skills/artifactbin/components/markdown-editor-model.ts'],
+    importers: [],
   },
   'prosemirror-markdown': {
     owner: 'lib/markdown',
     importers: [
-      'services/app/lib/html-components/markdown-editor-model.ts', 'services/app/lib/live-regions/markdown.ts',
-      'services/app/lib/live-regions/native-markdown.ts', 'services/app/lib/live-regions/source-html.ts',
-      'services/app/skills/artifactbin/components/markdown-editor-model.ts',
+      'services/app/lib/live-regions/markdown.ts', 'services/app/lib/live-regions/native-markdown.ts',
+      'services/app/lib/live-regions/source-html.ts',
     ],
   },
 };

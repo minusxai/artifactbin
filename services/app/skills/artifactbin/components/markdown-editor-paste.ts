@@ -1,10 +1,12 @@
 /**
- * Internal: paste pipe tables as editable Markdown tables and keep HTML table contents that
- * cannot be represented by a Markdown grid. Used by markdown-editor-commands.ts.
+ * Internal: af-markdown-editor's paste. Plain text reads as Markdown, except in code, in a table
+ * cell or with Shift held (Mod-Shift-V); HTML tables a Markdown grid cannot hold (merged cells,
+ * captions) become one paragraph per row. Used by markdown-editor-commands.ts.
  */
 import { Slice } from 'prosemirror-model';
 import { Plugin } from 'prosemirror-state';
-import { editorSchema, parseMarkdown } from './markdown-editor-model';
+import { parseMarkdown } from './markdown-editor-model';
+import { inTable } from './markdown-editor-table-commands';
 
 function normalizeHTMLTables(html: string, document: Document): string {
   if (!/<table[\s>]/i.test(html)) return html;
@@ -28,23 +30,31 @@ function normalizeHTMLTables(html: string, document: Document): string {
   return template.innerHTML;
 }
 
-export const tablePaste = new Plugin({
-  props: {
-    transformPastedHTML: (html, view) => normalizeHTMLTables(html, view.dom.ownerDocument),
-    handlePaste(view, event) {
-      const clipboard = event.clipboardData;
-      const source = clipboard?.getData('text/plain');
-      if (!source?.includes('|') || !source.includes('\n') || clipboard?.getData('text/html')) {
-        return false;
-      }
-      const { $from } = view.state.selection;
-      const { paragraph, heading, table } = editorSchema.nodes;
-      if ($from.parent.type !== paragraph && $from.parent.type !== heading) return false;
-      const doc = parseMarkdown(source);
-      if (!doc.content.content.some(node => node.type === table)) return false;
-      view.dispatch(view.state.tr.replaceSelection(new Slice(doc.content, 0, 0))
-        .setMeta('paste', true).setMeta('uiEvent', 'paste').scrollIntoView());
-      return true;
+/** A textblock at either end of pasted Markdown joins the text around the caret. */
+function markdownSlice(text: string, schema: Parameters<typeof parseMarkdown>[1]): Slice {
+  const { content } = parseMarkdown(text, schema);
+  return new Slice(content, content.firstChild?.isTextblock ? 1 : 0,
+    content.lastChild?.isTextblock ? 1 : 0);
+}
+
+export function markdownPaste(): Plugin {
+  let plain = false;
+  return new Plugin({
+    props: {
+      transformPastedHTML: (html, view) => normalizeHTMLTables(html, view.dom.ownerDocument),
+      handleDOMEvents: {
+        keydown: (_view, event) => { plain = event.shiftKey; return false; },
+        keyup: () => { plain = false; return false; },
+      },
+      handlePaste(view, event) {
+        const clipboard = event.clipboardData;
+        const text = clipboard?.getData('text/plain');
+        if (!text?.trim() || plain || clipboard?.getData('text/html')) return false;
+        if (view.state.selection.$from.parent.type.spec.code || inTable(view.state)) return false;
+        view.dispatch(view.state.tr.replaceSelection(markdownSlice(text, view.state.schema))
+          .setMeta('paste', true).setMeta('uiEvent', 'paste').scrollIntoView());
+        return true;
+      },
     },
-  },
-});
+  });
+}

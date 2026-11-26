@@ -2,9 +2,8 @@
 // The Markdown table toolbar, editing commands and keyboard navigation share one editor state.
 import { afterEach, expect, it } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
-import { EditorView } from 'prosemirror-view';
 import { editTable, insertTable } from './markdown-editor-table-commands';
-import { editorPlugins } from './markdown-editor-commands';
+import { mountEditor } from './markdown-editor-commands';
 import { parseMarkdown, serializeMarkdown } from './markdown-editor-model';
 import './markdown-editor';
 
@@ -65,8 +64,8 @@ it('cancels insertion with Escape and cannot insert while read-only', () => {
 });
 
 it('moves through cells with Tab and Shift-Tab, and exits a final table with Enter', () => {
-  const doc = parseMarkdown('| A | B |\n| --- | --- |\n| 1 | 2 |');
-  const view = new EditorView(document.body, { state: EditorState.create({ doc, plugins: editorPlugins() }) });
+  const editor = mountEditor(document.body, '| A | B |\n| --- | --- |\n| 1 | 2 |');
+  const view = editor.view, doc = view.state.doc;
   const key = (key: string, shiftKey = false) => view.dom.dispatchEvent(new KeyboardEvent('keydown', {
     key, shiftKey, cancelable: true, bubbles: true,
   }));
@@ -79,7 +78,7 @@ it('moves through cells with Tab and Shift-Tab, and exits a final table with Ent
     expect(view.state.selection.$from.parent.type.name).toBe('paragraph');
     view.dispatch(view.state.tr.insertText('After'));
     expect(serializeMarkdown(view.state.doc)).toMatch(/\n\nAfter$/);
-  } finally { view.destroy(); }
+  } finally { editor.destroy(); }
 });
 
 it('inserts between surrounding prose and leaves code and nested blocks intact', () => {
@@ -88,13 +87,13 @@ it('inserts between surrounding prose and leaves code and nested blocks intact',
   expect(insertTable(2, 2)(state, tr => { state = state.apply(tr); })).toBe(true);
   expect(state.doc.firstChild?.textContent).toBe('before');
   expect(state.doc.lastChild?.textContent).toBe('after');
-  expect(state.selection.$from.parent.type.name).toBe('table_header');
+  expect(state.selection.$from.parent.type.name).toBe('tableHeader');
   const doc = parseMarkdown('## Heading\n\n| Old |\n| --- |\n| a |\n\nFinal paragraph');
   for (const split of [TextSelection.atStart(doc), TextSelection.atEnd(doc)]) {
     state = EditorState.create({ doc, selection: split });
     expect(insertTable(3, 2)(state, tr => { state = state.apply(tr); })).toBe(true);
     expect(state.doc.content.content.filter(node => node.type.name === 'table')).toHaveLength(2);
-    expect(state.selection.$from.parent.type.name).toBe('table_header');
+    expect(state.selection.$from.parent.type.name).toBe('tableHeader');
   }
   for (const source of ['- in list', '> in quote', '```\ncode\n```']) {
     state = EditorState.create({ doc: parseMarkdown(source) });
@@ -117,15 +116,16 @@ it('keeps the header, column alignment and neighboring values through structural
 });
 
 it('keeps a grid editable after replacing a text selection spanning multiple table rows', () => {
-  const doc = parseMarkdown('| A | B | C |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |');
-  let state = EditorState.create({ doc, plugins: editorPlugins() });
+  const editor = mountEditor(document.createElement('div'), '| A | B | C |\n| --- | --- | --- |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |');
+  const doc = editor.state.doc;
   const positions = new Map<string, number>();
   doc.descendants((node, pos) => { if (node.isText) positions.set(node.text!, pos); });
-  state = state.apply(state.tr.setSelection(TextSelection.create(doc, positions.get('B')!, positions.get('2')!)));
-  state = state.apply(state.tr.insertText('Q'));
+  editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(doc, positions.get('B')!, positions.get('2')!)));
+  editor.view.dispatch(editor.state.tr.insertText('Q'));
+  let state = editor.state; editor.destroy();
   const table = state.doc.firstChild!;
   expect(table.firstChild!.content.content.map(cell => cell.type.name))
-    .toEqual(['table_header', 'table_header', 'table_header']);
+    .toEqual(['tableHeader', 'tableHeader', 'tableHeader']);
   expect(table.child(1).childCount).toBe(3);
   expect(state.selection.$from.parent.textContent).toBe('Q2');
   expect(editTable('column-after')(state, tr => { state = state.apply(tr); })).toBe(true);

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import { editorSchema, normalizeMarkdown, parseMarkdown, serializeMarkdown } from './markdown-editor-model';
-import { EditorState, TextSelection } from 'prosemirror-state';
-import { EditorView } from 'prosemirror-view';
-import { editorPlugins } from './markdown-editor-commands';
+import { TextSelection } from 'prosemirror-state';
+import { DOMParser } from 'prosemirror-model';
+import { mountEditor } from './markdown-editor-commands';
 import './markdown-editor';
 
 afterEach(() => document.body.replaceChildren());
@@ -24,8 +24,8 @@ describe('markdown-editor model', () => {
     const source = '# Title\n\n## Sub\n\n**bold** *em* ~~gone~~ `code` [site](https://x.dev)\n\n- one\n- two\n\n1. first\n2. second\n\n> quoted\n\n```sql\nselect 1\n```\n\n---\n\nend';
     expect(serializeMarkdown(parseMarkdown(source))).toBe(source);
   });
-  it('keeps images and HTML as literal text and normalizes spelling, not content', () => {
-    expect(normalizeMarkdown('![chart](https://x.dev/a.png)')).toBe('\\![chart](https://x.dev/a.png)');
+  it('keeps images, HTML as literal text and normalizes spelling, not content', () => {
+    expect(normalizeMarkdown('![chart](https://x.dev/a.png)')).toBe('![chart](https://x.dev/a.png)');
     expect(parseMarkdown('<b>hi</b>').textContent).toBe('<b>hi</b>');
     expect(normalizeMarkdown('_em_ __strong__\n\n* a\n* b')).toBe('*em* **strong**\n\n- a\n- b');
     expect(normalizeMarkdown('')).toBe('');
@@ -35,26 +35,27 @@ describe('markdown-editor model', () => {
     expect([...editable(root).querySelectorAll('a')].map(link => link.getAttribute('href'))).toEqual(['/ok']);
     const link = editorSchema.marks.link!.spec.parseDOM![0]!; const anchor = document.createElement('a');
     anchor.setAttribute('href', 'javascript:alert(1)'); expect(link.getAttrs!(anchor as never)).toBe(false);
-    anchor.setAttribute('href', 'https://x.dev'); expect(link.getAttrs!(anchor as never)).toEqual({ href: 'https://x.dev', title: null });
+    anchor.setAttribute('href', 'https://x.dev'); anchor.textContent = 'x';
+    const holder = document.createElement('p'); holder.append(anchor);
+    const pasted = DOMParser.fromSchema(editorSchema).parse(holder).firstChild!.firstChild!;
+    expect(pasted.marks.map(mark => [mark.type.name, mark.attrs])).toEqual([['link', { href: 'https://x.dev', title: null }]]);
   });
 });
 
 /** Type `text` (a newline presses Enter) at the end of a field holding `source`, through the editor's typing rules. */
 const typed = (source: string, text: string) => {
-  const view = new EditorView(document.createElement('div'), { state: EditorState.create({ doc: parseMarkdown(source), plugins: editorPlugins() }) });
+  const editor = mountEditor(document.createElement('div'), source); const view = editor.view;
   view.dispatch(view.state.tr.setSelection(TextSelection.atEnd(view.state.doc)));
   for (const char of text) {
     if (char === '\n') { view.someProp('handleKeyDown', handle => handle(view, new KeyboardEvent('keydown', { key: 'Enter' }))); continue; }
     const { from, to } = view.state.selection;
     if (!view.someProp('handleTextInput', handle => handle(view, from, to, char, () => view.state.tr.insertText(char, from, to)))) view.dispatch(view.state.tr.insertText(char, from, to));
   }
-  const markdown = serializeMarkdown(view.state.doc); view.destroy(); return markdown;
+  const markdown = serializeMarkdown(view.state.doc); editor.destroy(); return markdown;
 };
 
 it('keeps Control+E for navigation and formats inline code with Mod+Shift+E', () => {
-  const view = new EditorView(document.createElement('div'), {
-    state: EditorState.create({ doc: parseMarkdown('First\n\nLast'), plugins: editorPlugins() }),
-  });
+  const editor = mountEditor(document.createElement('div'), 'First\n\nLast'); const view = editor.view;
   try {
     const selectFirst = () =>
       view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 6)));
@@ -69,7 +70,7 @@ it('keeps Control+E for navigation and formats inline code with Mod+Shift+E', ()
     }));
     expect(serializeMarkdown(view.state.doc)).toBe('`First`\n\nLast');
   } finally {
-    view.destroy();
+    editor.destroy();
   }
 });
 

@@ -2,16 +2,36 @@
  * Internal: edit rectangular Markdown tables, keep their header row and move the caret by cell.
  * Used by the shared Markdown editor's toolbar and keyboard commands.
  */
-import type { Node as ProseNode } from 'prosemirror-model';
+import { Fragment, type Node as ProseNode } from 'prosemirror-model';
 import { Plugin, Selection, TextSelection, type Command, type EditorState,
   type Transaction } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
-import { editorSchema as schema, rectangularizeTable } from './markdown-editor-model';
+
+/** Preserve all cells after a paste or cross-cell edit while restoring GFM's rectangular shape. */
+function rectangularizeTable(table: ProseNode): ProseNode {
+  const { tableHeader, tableCell } = table.type.schema.nodes;
+  const head = table.firstChild!;
+  let width = head.childCount;
+  table.forEach(row => { width = Math.max(width, row.childCount); });
+  const columnAlign = (column: number) => head.maybeChild(column)?.attrs.align ?? null;
+  const rows = table.content.content.map((row, index) => {
+    const type = index === 0 ? tableHeader! : tableCell!;
+    if (row.childCount === width && row.content.content.every((cell, column) =>
+      cell.type === type && cell.attrs.align === columnAlign(column))) return row;
+    const cells = Array.from({ length: width }, (_, column) => {
+      const cell = row.maybeChild(column);
+      return type.create({ align: columnAlign(column) }, cell?.content);
+    });
+    return row.copy(Fragment.fromArray(cells));
+  });
+  return rows.every((row, index) => row === table.child(index))
+    ? table : table.copy(Fragment.fromArray(rows));
+}
 
 function cellAt(state: EditorState) {
   const { $from } = state.selection;
   const depth = $from.depth - 2;
-  if (depth < 1 || $from.node(depth).type !== schema.nodes.table) return;
+  if (depth < 1 || $from.node(depth).type.name !== 'table') return;
   return { table: $from.node(depth), start: $from.before(depth), row: $from.index(depth),
     column: $from.index(depth + 1), cellStart: $from.before(depth + 2) };
 }
@@ -41,9 +61,10 @@ export const insertTable = (rows: number, columns: number): Command => (state, d
       state.selection.$from.depth !== 1 || state.selection.$to.depth !== 1 ||
       state.selection.$from.parent.type.spec.code) return false;
   if (!dispatch) return true;
+  const schema = state.schema;
   const table = schema.node('table', null, Array.from({ length: rows }, (_, r) =>
-    schema.node('table_row', null, Array.from({ length: columns }, () =>
-      schema.node(r === 0 ? 'table_header' : 'table_cell')))));
+    schema.node('tableRow', null, Array.from({ length: columns }, () =>
+      schema.node(r === 0 ? 'tableHeader' : 'tableCell')))));
   const tr = state.tr.replaceSelectionWith(table);
   // At a paragraph edge ProseMirror places the table just outside the original selection.
   let start = -1;
@@ -70,8 +91,9 @@ export const editTable = (action: Change): Command => (state, dispatch) => {
   let nextRow = row, nextColumn = column;
   if (action === 'row-after') {
     const cells: ProseNode[] = [];
-    table.firstChild!.forEach(header => cells.push(schema.node('table_cell', header.attrs)));
-    tr.insert(rowStart(table, start, row + 1), schema.node('table_row', null, cells));
+    const { tableCell, tableRow } = state.schema.nodes;
+    table.firstChild!.forEach(header => cells.push(tableCell!.create(header.attrs)));
+    tr.insert(rowStart(table, start, row + 1), tableRow!.create(null, cells));
     nextRow++;
   } else if (action === 'delete-row') {
     const pos = rowStart(table, start, row);
@@ -117,7 +139,7 @@ export const moveCell = (direction: 'next' | 'previous' | 'down'): Command =>
       const following = Selection.findFrom(tr.doc.resolve(after), 1, true);
       if (following) tr.setSelection(following);
       else {
-        tr.insert(after, schema.node('paragraph'));
+        tr.insert(after, state.schema.node('paragraph'));
         tr.setSelection(TextSelection.create(tr.doc, after + 1));
       }
       dispatch(tr.scrollIntoView());
@@ -159,7 +181,7 @@ export const tableFocus = new Plugin({
         oldState.doc.resolve(from).sameParent(oldState.doc.resolve(end.a))) return null;
     const tr = state.tr;
     state.doc.nodesBetween(from, Math.max(from, end.b), (node, pos) => {
-      if (node.type !== schema.nodes.table) return;
+      if (node.type.name !== 'table') return;
       repairTable(tr, node, pos);
       return false;
     });

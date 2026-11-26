@@ -69,9 +69,9 @@ export default {
         // The public custom-element entry points in build-html-components.
         ...hostedComponents.map((name) => `lib/html-components/${name}.ts!`),
         'lib/libraries/*.js!', 'web/solid-entry.tsx!', 'web/shell.css!',
-        // The shared Markdown module's two doors. The editor waits for its surfaces (DEEP_MODULES' awaitingImporters);
-        // af-markdown uses the display door's parse and renderHtml, and its other names wait for comments and documents.
-        'lib/markdown/{display,editor}.ts!',
+        // The shared Markdown module's display door: af-markdown uses its parse and renderHtml, and its other names
+        // wait for comments and documents. The editor door's importer is af-markdown-editor.
+        'lib/markdown/display.ts!',
         // Server bundle workers (scripts/build/build-server.mjs).
         'lib/viz/chart-image-worker.ts!', 'lib/viz/chart-image-worker-dev.mjs',
         // The app's font faces, which the root vite.config.mts writes into the built SPA.
