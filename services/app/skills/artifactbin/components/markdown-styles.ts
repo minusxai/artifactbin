@@ -37,6 +37,8 @@ export const MARKDOWN_CSS = [
   rule('ul,ol', 'padding-inline-start:40px'),
   rule('li>p,li>div>p,p[data-list]', 'margin-block:0 .3em'),
   rule('li>ul,li>ol,li>div>ul,li>div>ol', 'margin-block:0'),
+  // A tight list (the shared Markdown markup's `data-tight`) keeps its items' paragraphs flush.
+  `${R} :where(ul[data-tight],ol[data-tight])>:where(li)>:where(p){margin-block:0}`,
   // While edited, a list is flat items with no list box to carry its 1em end margin: the block
   //   after one gets it.
   `${R} :where(p[data-list])+:where(p:not([data-list]),pre){margin-block-start:1em}`,
@@ -81,6 +83,7 @@ export const MARKDOWN_CSS = [
     'vertical-align:top;text-align:start'),
   rule('th', 'background:var(--muted,transparent);font-weight:600'),
   rule('td p,th p', 'margin:0'),
+  rule('img', 'max-width:100%'),
   // Highlighted code tokens (af-markdown's highlighter); light defaults, dark under the
   //   platform's dark mode.
   rule('pre code[class^="language-"]', 'color:var(--foreground,#24292f)'),

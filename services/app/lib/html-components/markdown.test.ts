@@ -1,18 +1,67 @@
 // @vitest-environment jsdom
-import {afterEach,expect,it} from 'vitest';
+import {afterEach,expect,it,vi} from 'vitest';
 import {AfMarkdown,type MarkdownContract} from './markdown';
 import './markdown';
 import { MARKDOWN_CSS } from './markdown-styles';
-afterEach(()=>document.body.replaceChildren());
+import { parse, renderHtml } from '../markdown/display';
+afterEach(()=>{document.body.replaceChildren();vi.restoreAllMocks();});
 it('renders retained GFM with stable headings, highlighting and preserved authored identity',()=>{
  const el=document.createElement('af-markdown') as AfMarkdown; el.textContent='# Hello\n\n~~gone~~\n\n```js\nconst x = 1\n```'; el.setAttribute('data-af-id','author'); document.body.append(el);
  expect(el.querySelector('s')?.textContent).toBe('gone'); expect(el.querySelector('.mx-code-token-keyword')).not.toBeNull(); const id=el.querySelector('h1')?.id;
  el.source='# Hello\n\nUpdated'; expect(el.querySelector('h1')?.id).toBe(id); expect(el.getAttribute('data-af-id')).toBe('author'); expect(el.shadowRoot).toBeNull(); const contract:MarkdownContract=el; expect(contract.source).toContain('Updated');
 });
-it('refuses unsafe links and unsupported HTML through the existing vocabulary',()=>{
- const el=document.createElement('af-markdown') as AfMarkdown; document.body.append(el); el.source='[bad](javascript:alert(1))'; expect(el.querySelector('a')).toBeNull(); expect(el.querySelector('[role=alert]')).not.toBeNull();
- el.source='<img src=x onerror=alert(1)>'; expect(el.querySelector('img')).toBeNull();
+it('shows a refused link as typed and warns once per render, never hiding the text behind an alert',()=>{
+ const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});
+ const el=document.createElement('af-markdown') as AfMarkdown; document.body.append(el); warn.mockClear();
+ el.source='Before [bad](javascript:alert(1)) and ![pic](http://insecure.example/a.png) after **bold**';
+ expect([...el.querySelectorAll('a')].map(a=>a.getAttribute('href'))).toEqual(['http://insecure.example/a.png']); expect(el.querySelector('img')).toBeNull(); expect(el.querySelector('[role=alert]')).toBeNull();
+ expect(el.querySelector('p')?.textContent).toBe('Before [bad](javascript:alert(1)) and ![pic](http://insecure.example/a.png) after bold');
+ expect(el.querySelector('strong')?.textContent).toBe('bold');
+ expect(warn).toHaveBeenCalledTimes(1);
+ expect(String(warn.mock.calls[0]![0])).toContain('[bad](javascript:alert(1))');
+ expect(String(warn.mock.calls[0]![0])).toContain('![pic](http://insecure.example/a.png)');
+ el.source='[bad](javascript:alert(1))'; expect(el.querySelector('a')).toBeNull(); expect(warn).toHaveBeenCalledTimes(2);
+ el.source='# Fine [ok](https://a.example)'; expect(warn).toHaveBeenCalledTimes(2); expect(el.querySelector('a')?.getAttribute('href')).toBe('https://a.example');
 });
+it('shows raw HTML as literal text, never as markup',()=>{
+ const el=document.createElement('af-markdown') as AfMarkdown; document.body.append(el);
+ el.source='<img src=x onerror=alert(1)> <script>alert(1)</script>';
+ expect(el.querySelector('img,script')).toBeNull(); expect(el.querySelector('[role=alert]')).toBeNull();
+ expect(el.querySelector('p')?.textContent).toBe('<img src=x onerror=alert(1)> <script>alert(1)</script>');
+});
+it('renders through the shared Markdown display entry, images on and a single newline as a break',()=>{
+ const source='# Title\n\none\ntwo\n\n- [x] done\n- [ ] open\n\n![A chart](https://img.example/c.png "Chart")\n\n| a | b |\n| - | -: |\n| 1 | 2 |';
+ const el=document.createElement('af-markdown') as AfMarkdown; el.id='doc'; el.copyControls=false; el.source=source; document.body.append(el);
+ const output=el.querySelector('.af-markdown-body')!;
+ const expected=document.createElement('div'); expected.innerHTML=renderHtml(parse(source,{images:true}));
+ expected.querySelectorAll<HTMLElement>('[data-mx-markdown-heading]').forEach(h=>{h.id=`doc-heading-${h.dataset.mxMarkdownHeading}`;});
+ expect(output.innerHTML).toBe(expected.innerHTML);
+ expect(el.querySelector('p br')).not.toBeNull();
+ const img=el.querySelector('img')!; expect(img.getAttribute('src')).toBe('https://img.example/c.png'); expect(img.alt).toBe('A chart'); expect(img.title).toBe('Chart'); expect(img.getAttribute('loading')).toBe('lazy');
+ expect([...el.querySelectorAll('li[role=checkbox]')].map(li=>li.getAttribute('aria-checked'))).toEqual(['true','false']);
+});
+it('anchors headings 1-3 as ${id||scope}-heading-N in document order',()=>{
+ const named=document.createElement('af-markdown') as AfMarkdown; named.id='notes'; named.source='# A\n\n## B\n\n#### C\n\n### D'; document.body.append(named);
+ expect([...named.querySelectorAll('h1,h2,h3,h4')].map(h=>h.id)).toEqual(['notes-heading-0','notes-heading-1','','notes-heading-2']);
+ const anonymous=document.createElement('af-markdown') as AfMarkdown; anonymous.source='## Only'; document.body.append(anonymous);
+ expect(anonymous.querySelector('h2')!.id).toMatch(/^af-markdown-\d+-heading-0$/);
+});
+it('emits no events while rendering, updating or reconnecting',()=>{
+ const dispatch=vi.spyOn(EventTarget.prototype,'dispatchEvent');
+ try {
+  const el=document.createElement('af-markdown') as AfMarkdown; el.textContent='# One\n\n```js\nconst a = 1\n```'; document.body.append(el);
+  el.source='## Two [x](javascript:y)'; el.setAttribute('copy-controls','false'); el.remove(); document.body.append(el);
+  expect(dispatch.mock.contexts.filter(target=>target instanceof Node&&(target===el||el.contains(target)))).toEqual([]);
+ } finally { dispatch.mockRestore(); }
+});
+it('renders hostile nesting and emphasis runs without hanging, keeping their text',()=>{
+ const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});
+ const el=document.createElement('af-markdown') as AfMarkdown; document.body.append(el);
+ for(const source of ['- '.repeat(2000)+'deepest','> '.repeat(5000)+'deepest','*a'.repeat(20000)+' deepest','[a](b'.repeat(5000)+' deepest']){
+  el.source=source; expect(el.querySelector('.af-markdown-body')!.textContent,source.slice(0,12)).toContain('deepest');
+ }
+ expect(warn).not.toHaveBeenCalled();
+},20000);
 it('preserves authored nodes outside its generated output',()=>{
  const el=document.createElement('af-markdown') as AfMarkdown; const note=document.createElement('aside'); note.setAttribute('data-af-id','note'); el.append(note); document.body.append(el); el.source='# Heading'; expect(el.querySelector('aside')).toBe(note);
 });

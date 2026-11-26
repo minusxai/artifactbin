@@ -31,7 +31,7 @@ const LOCK = 'package-lock.json';
 const APP_PACKAGE = 'services/app/package.json';
 const TOOLS = ['services/app/scripts/build-server-reader.mjs', 'services/app/scripts/server-reader-cache.mjs',
   'services/app/scripts/build-libraries.mjs', 'scripts/build/build-html-components.mjs', 'scripts/lib/html-components-build.mjs',
-  'services/app/scripts/precompress.mjs',
+  'scripts/lib/slim-entities.mjs', 'services/app/scripts/precompress.mjs',
   LOCK, APP_PACKAGE, 'services/app/lib/libraries/registry.json'];
 // Discover additions to the component and hosted-library entry sets.
 const SOURCE_DIRS = ['lib/html-components', 'lib/libraries'];

@@ -3,6 +3,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {build} from 'esbuild';
 import {writeComponentAssetReceipt} from './component-asset-proof.mjs';
+import {slimEntitiesEsbuild} from './slim-entities.mjs';
 /** `entries` limits the compiled entry points (default: every source). With `readableDir`, compiled modules go to
  * `outputDir` and the readable `.ts` sources reached from `readableEntries` (default: every entry) go to `readableDir`
  * (the skill's reference copy), minus `readableOmit`; without it both land in `outputDir`.
@@ -31,7 +32,8 @@ export async function buildComponentAssets({sourceDir,outputDir,readableDir,entr
   const result=await build({entryPoints:names.map(name=>path.join(sourceDir,name)),outdir:outputDir,
     bundle:true,splitting:true,minify:true,write:false,metafile:true,format:'esm',platform:'browser',target:'es2022',
     entryNames:'[name]',chunkNames:'chunk-[hash]',alias:{'@':path.resolve(appDir)},logLevel:'silent',
-    plugins:[{name:'page-module-externals',setup(builder){
+    // markdown-it's entity table resolves to lib/markdown's slim decoder, as in every build of that module.
+    plugins:[slimEntitiesEsbuild(),{name:'page-module-externals',setup(builder){
       builder.onResolve({filter:/^@afbin\//},args=>PAGE_MODULE_EXTERNALS.includes(args.path)?{path:args.path,external:true}:undefined);
     }}]});
   for(const output of Object.values(result.metafile.outputs)) for(const dependency of output.imports) {
@@ -65,7 +67,7 @@ export async function buildComponentAssets({sourceDir,outputDir,readableDir,entr
   // installation intact; a failed final rename restores the previous directory.
   const installs=readableDir?[{dir:outputDir,files:compiled},{dir:path.resolve(readableDir),files:sources}]:[{dir:outputDir,files:[...sources,...compiled]}];
   for(const {dir,files} of installs)await install(dir,files);
-  if(receipt)await writeComponentAssetReceipt({root:receipt.root,receiptPath:receipt.path,inputs:[...Object.keys(result.metafile.inputs).map(name=>path.resolve(name)),fileURLToPath(import.meta.url),fileURLToPath(new URL('./component-asset-proof.mjs',import.meta.url)),path.join(receipt.root,'package-lock.json')],outputs:installs.flatMap(({dir,files})=>files.map(({name})=>path.join(dir,name)))});
+  if(receipt)await writeComponentAssetReceipt({root:receipt.root,receiptPath:receipt.path,inputs:[...Object.keys(result.metafile.inputs).map(name=>path.resolve(name)),fileURLToPath(import.meta.url),fileURLToPath(new URL('./component-asset-proof.mjs',import.meta.url)),fileURLToPath(new URL('./slim-entities.mjs',import.meta.url)),path.join(receipt.root,'package-lock.json')],outputs:installs.flatMap(({dir,files})=>files.map(({name})=>path.join(dir,name)))});
   return names.map(name=>name.replace(/\.ts$/,''));
 }
 /** Replace every owned (component-named) file of `dir` in one directory swap, keeping unrelated files. */

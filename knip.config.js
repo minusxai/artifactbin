@@ -69,7 +69,8 @@ export default {
         // The public custom-element entry points in build-html-components.
         ...hostedComponents.map((name) => `lib/html-components/${name}.ts!`),
         'lib/libraries/*.js!', 'web/solid-entry.tsx!', 'web/shell.css!',
-        // The shared Markdown module's two doors, ahead of the surfaces that move onto them (DEEP_MODULES' awaitingImporters).
+        // The shared Markdown module's two doors. The editor waits for its surfaces (DEEP_MODULES' awaitingImporters);
+        // af-markdown uses the display door's parse and renderHtml, and its other names wait for comments and documents.
         'lib/markdown/{display,editor}.ts!',
         // Server bundle workers (scripts/build/build-server.mjs).
         'lib/viz/chart-image-worker.ts!', 'lib/viz/chart-image-worker-dev.mjs',
@@ -96,8 +97,8 @@ export default {
         '@aws-sdk/s3-request-presigner',
         // Plugins of the root vite/vitest configs this workspace's build and test scripts run.
         '@tailwindcss/vite',
-        // Type-only imports of @types/mdast, @types/hast and Vite's bundler types, installed with remark and Vite.
-        'mdast', 'rolldown',
+        // Type-only imports of Vite's bundler types, installed with Vite.
+        'rolldown',
         // The hosted page modules, which a check steps file (skills/artifactbin/examples/api-dashboard-steps.mjs)
         // and a page's own module (examples/csv-dashboard.mjs) import inside the published page; pages get them
         // from the platform's import map.
