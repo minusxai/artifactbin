@@ -5,6 +5,7 @@ import full from './vitest.config';
 import { laneFiles, nodeBatchFiles, readNodeAffected } from './scripts/lib/node-batch.mjs';
 import { MODULE_CACHE_DIR, schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
 import TimedSequencer from './scripts/lib/timed-sequencer.mjs';
+import { SLIM_ENTITIES_INLINE, slimEntitiesVite } from './scripts/lib/slim-entities.mjs';
 import { readTimings } from './scripts/lib/timed-sequencer.mjs';
 
 // PR FAST'S NODE BATCH (scripts/lib/node-batch.mjs): the full suite's cheap `node` files, one shared module graph per
@@ -21,9 +22,12 @@ const affected = readNodeAffected(root);
 
 export default defineConfig({
   root,
+  // markdown-it's `entities` import resolves to lib/markdown's slim decoder (scripts/lib/slim-entities.mjs), as in vitest.config.ts.
+  plugins: [slimEntitiesVite()],
   resolve: { alias: { '@': path.resolve(root, 'services/app') } },
   test: {
     globals: true,
+    server: { deps: { inline: SLIM_ENTITIES_INLINE } },
     sequence: { sequencer: TimedSequencer },
     testTimeout: 45_000,
     hookTimeout: 45_000,

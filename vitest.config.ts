@@ -6,6 +6,7 @@ import { cachedSolid, declaredLucideIcons } from './scripts/lib/cached-solid.mjs
 import { MODULE_CACHE_DIR, schemaImageDir, suiteEnv } from './scripts/lib/suite-env.mjs';
 import { chromiumTests } from './scripts/lib/chromium-tests.mjs';
 import { LEAKS_PAST_ITS_FILE } from './scripts/lib/test-isolation.mjs';
+import { SLIM_ENTITIES_INLINE, slimEntitiesVite } from './scripts/lib/slim-entities.mjs';
 
 // The Solid editor modules (services/app/solid): the same Solid transform and jsdom, run by the
 // islands project because scripts/ci/test-changed.mjs discovers only api/node/ui/islands.
@@ -74,6 +75,8 @@ const solidJsdom = () => ({
 
 export default defineConfig({
   root: import.meta.dirname,
+  // markdown-it's `entities` import resolves to lib/markdown's slim decoder, as in every build that bundles the module.
+  plugins: [slimEntitiesVite()],
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, 'services/app'),
@@ -81,6 +84,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    server: { deps: { inline: SLIM_ENTITIES_INLINE } },
     // `--shard` packs files by measured CI time (scripts/ci/test-timings.json), not by count.
     sequence: { sequencer: TimedSequencer },
     testTimeout: 45_000,

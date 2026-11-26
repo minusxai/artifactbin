@@ -1,12 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
+import { SLIM_ENTITIES_INLINE, slimEntitiesVite } from './scripts/lib/slim-entities.mjs';
 
 // Deliberately independent of the full suite's server-reader build, DB and jsdom setup.
 export default defineConfig({
+  // markdown-it's `entities` import resolves to lib/markdown's slim decoder (scripts/lib/slim-entities.mjs), as in vitest.config.ts.
+  plugins: [slimEntitiesVite()],
   resolve: { alias: { '@': new URL('./services/app', import.meta.url).pathname } },
   test: {
     name: 'fast-module-unit',
     globals: true,
+    server: { deps: { inline: SLIM_ENTITIES_INLINE } },
     include: JSON.parse(readFileSync(new URL('./scripts/ci/fast-tests.json', import.meta.url), 'utf8')) as string[],
     environment: 'node',
     testTimeout: 2000,
