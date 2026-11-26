@@ -96,6 +96,18 @@ it('an HTML paste builds images from the sources a document may hold and drops e
   expect(saved.match(/<img /g)).toHaveLength(4);
 });
 
+it('a pasted image inside a link or bold is kept without the mark (a document image carries none)', () => {
+  const page = checked();
+  const html = '<p><a href="https://e.example"><img src="https://b.example/b.svg" alt="badge"></a> <strong>bold <img src="ref:abcdef12" alt="s"></strong></p>';
+  page.editor.view.dispatch(page.editor.view.state.tr.setSelection(TextSelection.atEnd(page.editor.view.state.doc)));
+  page.editor.view.pasteHTML(html, clipboard('', html));
+  const marked: string[][] = [];
+  page.editor.view.state.doc.descendants(node => { if (node.type.name === 'image') marked.push(node.marks.map(mark => mark.type.name)); });
+  expect(marked).toEqual([[], [], [], []]);
+  const { live } = page.saveNow();
+  expect(live).toContain('<img src="https://b.example/b.svg" alt="badge"> <strong>bold </strong><img src="ref:abcdef12" alt="s">');
+});
+
 it('a pasted image keeps a title only up to the 512 characters the document stores', () => {
   const page = checked();
   const html = `<p><img src="ref:abcdef12" alt="t" title="${'t'.repeat(600)}"></p>`;

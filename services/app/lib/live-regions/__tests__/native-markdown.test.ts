@@ -155,6 +155,7 @@ describe('Markdown writes images', () => {
   it.each([
     ['an image with alt and title', '<p data-af-id="a">See <img data-af-id="i" src="ref:abcdef12" alt="A &amp; B" title="Chart"> and <img data-af-id="j" src="https://i.example/p.png?a=1&amp;b=2" alt=""></p>'],
     ['sources and text Markdown must escape', '<p data-af-id="a"><img data-af-id="i" src="https://i.example/a(1).png" alt="x [y] *z*" title="say &quot;hi&quot;"> <img data-af-id="j" src="https://i.example/caf%C3%A9.png" alt="café"></p>'],
+    ['sources with a raw space and a raw non-ASCII character', '<p data-af-id="a"><img data-af-id="i" src="https://i.example/a b.png" alt="s"> <img data-af-id="j" src="https://i.example/café.png" alt="e"></p>'],
     ['images in a heading, a list and a quote', '<h2 data-af-id="h"><img data-af-id="i" src="ref:abcdef12" alt="logo"> Title</h2><ul data-af-id="l"><li data-af-id="li"><p data-af-id="lp">item <img data-af-id="j" src="/a/x/raw" alt=""></p></li></ul><blockquote data-af-id="q"><p data-af-id="qp"><img data-af-id="k" src="ref:abcdef12" alt="q"></p></blockquote>'],
   ])('%s: sending back what was read changes nothing', (_name, saved) => {
     const { state, snapshot } = createRegionState(kind, saved);

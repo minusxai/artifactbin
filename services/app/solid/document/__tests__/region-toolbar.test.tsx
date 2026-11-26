@@ -216,12 +216,14 @@ describe('the image dialog', () => {
     expect(page.commands).toEqual([['image', { src: 'https://i.example/c.png', alt: '' }]]);
   });
 
-  it('the slash menu\'s Image removes the `/` and opens the dialog; closing it unused returns to the text', async () => {
+  it('the slash menu\'s Image opens the dialog, which removes the `/` as it closes; closing it unused returns to the text', async () => {
     const page = chrome();
     page.state([], 'paragraph');
     page.setSlash({ regionId: 'notes', left: 10, top: 10 });
     fireEvent.click(await screen.findByRole('option', { name: 'Image' }));
-    expect(page.commands).toEqual([['removeSlash']]);
+    // No editor command (which takes the focus back to the frame) while the dialog takes it.
+    expect(page.commands).toEqual([]);
+    expect(screen.queryByRole('dialog', { name: 'Insert block' })).toBeNull();
     const field = await screen.findByRole('textbox', { name: 'Image URL' });
     await waitFor(() => expect(field).toHaveFocus());
     fireEvent.keyDown(document, { key: 'Escape' });

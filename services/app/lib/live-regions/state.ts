@@ -6,7 +6,7 @@
 import * as Y from 'yjs';
 import { createNativeState, nativeHtml, nativeDocument, reviseNative } from './native-state';
 import { nativeMarkdownJson } from './native-markdown';
-import { writeNativeMarkdown } from './native-markdown-save';
+import { keepImageSpelling, writeNativeMarkdown } from './native-markdown-save';
 import { nativeSchema } from './native-schema';
 import { readNativeHtml, writeNativeHtml } from './native-html';
 import type { Node as PMNode } from 'prosemirror-model';
@@ -234,9 +234,11 @@ export function applyRegionRevision(input: RegionRevisionInput): RegionRevision 
   const { kind } = input;
   if ((input.html === undefined) === (input.markdown === undefined)) throw new TypeError('applyRegionRevision takes exactly one of html or markdown');
   if (kind === 'rich-native-v1') {
+    if (input.html !== undefined) return reviseNative(input.live, input.savedSnapshot, input.html);
     // Refuse a representation that cannot carry the existing ARIA attributes (a legacy checkbox). Images are Markdown.
-    if (input.markdown !== undefined) writeNativeMarkdown(nativeDocument(openRegionDoc(input.live,{kind})));
-    return reviseNative(input.live, input.savedSnapshot, input.html ?? writeNativeHtml(nativeSchema.nodeFromJSON(nativeMarkdownJson(input.markdown!))));
+    const live = nativeDocument(openRegionDoc(input.live,{kind}));
+    writeNativeMarkdown(live);
+    return reviseNative(input.live, input.savedSnapshot, writeNativeHtml(nativeSchema.nodeFromJSON(keepImageSpelling(nativeMarkdownJson(input.markdown!), live))));
   }
   const revision = readRegion(kind, input.html !== undefined ? htmlSource(input.html) : markdownSource(input.markdown!, kind), 'refuse');
   if (!input.savedSnapshot?.length) throw new LiveRegionRefusal('missing_snapshot');

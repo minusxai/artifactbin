@@ -3,15 +3,21 @@
 import { isolated } from './native-editor-actions';
 import { safeHref } from '../live-regions/href';
 import { Extension } from '@tiptap/core';
-import type { Node as PMNode, Slice } from 'prosemirror-model';
+import { Fragment, Slice, type Node as PMNode } from 'prosemirror-model';
 import { Plugin, type Transaction } from 'prosemirror-state';
 import { freshClipboard as sharedFreshClipboard, indentNative } from '../markdown/editing';
 
 export { indentNative };
 
 /** Copied blocks are new identities, even when an internal clipboard slice carries original attributes; a region keeps only the
- * links safeHref leaves unchanged. */
-export const freshClipboard = (slice: Slice): Slice => sharedFreshClipboard(slice, href => safeHref(href) === href);
+ * links safeHref leaves unchanged, and an image no mark (a pasted `<a><img></a>` keeps the image alone: the shared
+ * document stores none on it, lib/live-regions native-schema.ts). */
+export const freshClipboard = (slice: Slice): Slice => {
+  const fresh = sharedFreshClipboard(slice, href => safeHref(href) === href);
+  const unmarked = (node: PMNode): PMNode => node.type.name === 'image' ? node.mark([])
+    : node.isText || !node.childCount ? node : node.copy(Fragment.fromArray(Array.from({ length: node.childCount }, (_, i) => unmarked(node.child(i)))));
+  return new Slice(Fragment.fromArray(Array.from({ length: fresh.content.childCount }, (_, i) => unmarked(fresh.content.child(i)))), fresh.openStart, fresh.openEnd);
+};
 export const NativeIndentation=Extension.create({
  name:'nativeIndentation',priority:1100,
  addKeyboardShortcuts(){return {

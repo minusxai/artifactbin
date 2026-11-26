@@ -118,7 +118,7 @@ function LinkControl(props: { ui: RegionUi; state: Accessor<RegionToolbarState> 
 }
 
 /** An image address as typed: trimmed, and a bare host path (`host.example/x.png`, `www.…`) read as https. */
-export function imageSource(typed: string): string | null {
+function imageSource(typed: string): string | null {
   const value = typed.trim();
   const src = /^(?:www\.|[a-z0-9-]+(?:\.[a-z0-9-]+)+\/)/i.test(value) ? `https://${value}` : value;
   return src && imageAllowed(src) ? src : null;
@@ -129,18 +129,21 @@ function ImageControl(props: { ui: RegionUi; asked?: Accessor<number> }): JSX.El
   const [src, setSrc] = createSignal('');
   const [alt, setAlt] = createSignal('');
   const [error, setError] = createSignal<string | null>(null);
-  /** Opened from the slash menu: closing without an image goes back to the text. */
+  /** Opened from the slash menu: its `/` goes only once the dialog closes (no editor command, which takes the focus back
+   * to the frame, runs while the dialog takes it), and closing without an image goes back to the text. */
   let fromEditor = false;
   const show = (editor: boolean) => { fromEditor = editor; setSrc(''); setAlt(''); setError(null); setOpen(true); };
+  const leaveSlash = () => { if (fromEditor) props.ui.command('removeSlash'); };
   createEffect(on(() => props.asked?.() ?? 0, (asked) => { if (asked) show(true); }, { defer: true }));
   const close = (done: boolean) => {
     if (!open()) return;
     setOpen(false);
-    if (!done && fromEditor) props.ui.command('resume');
+    if (!done) { leaveSlash(); if (fromEditor) props.ui.command('resume'); }
   };
   const apply = () => {
     const source = imageSource(src());
     if (!source) { setError('Use an https image address or an upload (ref:…).'); return; }
+    leaveSlash();
     props.ui.command('image', { src: source, alt: alt().trim() });
     close(true);
   };
@@ -254,9 +257,10 @@ export function SlashMenu(props: { ui: RegionUi; at: Accessor<{ left: number; to
     if (done) return;
     done = true;
     props.ui.closeSlash();
+    // The image dialog removes the `/` itself once it closes.
+    if (item.id === 'image' && props.onImage) { props.onImage(); return; }
     props.ui.command('removeSlash');
-    if (item.id === 'image' && props.onImage) props.onImage();
-    else props.ui.command(item.command[0], item.command[1]);
+    props.ui.command(item.command[0], item.command[1]);
   };
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(true); return; }
