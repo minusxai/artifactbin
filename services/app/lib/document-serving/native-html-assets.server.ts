@@ -21,6 +21,6 @@ export async function nativeHtmlAssets(row:Pick<ArtifactRow,'id'|'version'|'sour
  ]);
  for(const asset of headers)if(['image','file','pdf'].includes(asset.format))urls.set('ref:'+asset.id,`/a/${asset.id}/raw?v=${asset.version}`);
  for(const [url,asset] of images)urls.set(url,`/assets/${asset.url_hash}`);
- for(const url of documentImages(source))if(!urls.has(url))urls.set(url,`/a/${row.id}/assets?u=${encodeURIComponent(url)}${captureKey?`&key=${encodeURIComponent(captureKey)}`:''}`);
+ if(assets.imageUrls.some(url=>url.startsWith('https://')&&!images.has(url)))for(const url of documentImages(source))if(!urls.has(url))urls.set(url,`/a/${row.id}/assets?u=${encodeURIComponent(url)}${captureKey?`&key=${encodeURIComponent(captureKey)}`:''}`);
  return pinPublicationAssetUrls(rewriteHtmlAssetUrls(source,urls),row.id,row.version,'text/html',[],captureKey);
 }

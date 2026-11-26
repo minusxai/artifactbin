@@ -96,6 +96,12 @@ describe('an agent reads a document as Markdown and writes it back', () => {
       .toBe('A\n\n- B\n- C\n\n2. D\n\n```js\nx\n```');
   });
 
+  it('a URL that is plain text in the document links once an agent sends the Markdown back (bare addresses link)', () => {
+    const saved = '<p data-af-id="a">see https://e.test and www.example.com</p>';
+    expect(regionMarkdown(kind, saved)).toBe('see https://e.test and www.example.com');
+    expect(write(saved, regionMarkdown(kind, saved))).toBe(`<p data-af-id="a">see <a href="https://e.test" ${LINK}>https://e.test</a> and <a href="http://www.example.com" ${LINK}>www.example.com</a></p>`);
+  });
+
   it('an edit to the Markdown read changes only that block', () => {
     const saved = '<p data-af-id="a">alpha</p><ul data-af-id="l"><li data-af-id="i"><p data-af-id="ip">item</p></li></ul><p data-af-id="z">omega</p>';
     expect(write(saved, regionMarkdown(kind, saved).replace('item', 'item, revised')))

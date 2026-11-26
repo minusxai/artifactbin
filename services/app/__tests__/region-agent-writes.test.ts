@@ -295,6 +295,21 @@ it('a hand-written native region with whitespace between its blocks reads as Mar
  expect([written.status,written.body.version]).toEqual([200,2]);
  expect((await read({person:owner},'_doc','',row.id)).body).toMatchObject({version:2,markdown:expect.stringContaining('Last edited')});
 });
+it('a native region published with an image opens with it, reads it as Markdown image syntax and takes only HTML writes',async()=>{
+ const row=await createArtifact(null,owner.id,{format:'html',source:nativeHtml('<article data-af-editable="rich-native-v1"><p>See <img src="https://i.example/chart.png" alt="chart"></p></article>'),meta:{},visibility:'private'});
+ const readBack=await read({person:owner},'_doc','',row.id);
+ expect(readBack.body).toMatchObject({kind:'rich-native-v1',version:1,markdown:'See ![chart](https://i.example/chart.png)'});
+ const regionId=String(readBack.body.regionId);
+ const req=request(`/api/artifacts/${row.id}/regions/${regionId}/open`,{method:'POST',actor:as(owner),origin:'same'});
+ const opened=await call(req,()=>openRoute(req,params({ id:row.id,regionId })));
+ expect(opened.status).toBe(200);
+ const doc=openRegionDoc(Buffer.from((await opened.json() as {state:string}).state,'base64'),{kind:'rich-native-v1'});
+ expect(((doc.getXmlFragment('native-v1').get(0) as Y.XmlElement).get(1) as Y.XmlElement).getAttributes()).toMatchObject({src:'https://i.example/chart.png',alt:'chart'});
+ expect(await write({person:owner},{base_version:1,markdown:'See ![chart](https://i.example/chart.png) now'},'_doc',{},row.id)).toEqual({status:422,body:{error:'unsupported_content',details:['image requires HTML']}});
+ const html=String((await read({person:owner},'_doc','?format=html',row.id)).body.html);
+ const written=await write({person:owner},{base_version:1,html:html.replace('See ','Look: ')},'_doc',{},row.id);
+ expect([written.status,written.body.html]).toEqual([200,expect.stringMatching(/^<p data-af-id="[^"]+">Look: <img data-af-id="[^"]+" src="https:\/\/i\.example\/chart\.png" alt="chart"><\/p>$/)]);
+});
 it('a native region whose saved content the kind cannot hold reads as unsupported_content, never a server error; its HTML still reads',async()=>{
  const row=await createHistoricalPage(null,owner.id,{format:'html',source:nativeHtml('<section data-af-editable="rich-native-v1"><p>a</p><svg></svg></section>'),meta:{},visibility:'private'});
  const refused=await read({person:owner},'_doc','',row.id);
