@@ -24,12 +24,13 @@
 import { betterAuth } from 'better-auth';
 import { createAuthEndpoint, createAuthMiddleware } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
+import { getSchema } from 'better-auth/db';
 import { getMigrations } from 'better-auth/db/migration';
 import { isTestDomainEmail, type TestDomainSignIn } from '@artifactbin/contracts/test-domain';
 import type { EventsService } from '@artifactbin/contracts/events';
 import type { Queryable } from '@artifactbin/contracts/db';
 import { emailOTP, genericOAuth } from 'better-auth/plugins';
-import { Kysely, PostgresDialect } from 'kysely';
+import { Kysely, PostgresDialect, type KyselyPlugin } from 'kysely';
 import { createHmac, randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { say } from '../events';
@@ -162,10 +163,10 @@ const trustedSessionPlugin = {
       if (typeof userId !== 'string' || !userId) throw new Error('trusted session: no user');
       const user = await ctx.context.internalAdapter.findUserById(userId);
       if (!user) throw new Error('trusted session: unknown user');
-      // Not remembered: a browser-session cookie, and a server expiry Better Auth never extends (one day). The parent
-      // signs the person in again on every frame load, so nothing longer is needed.
-      const session = await ctx.context.internalAdapter.createSession(userId, true);
-      await setSessionCookie(ctx, { session, user }, true);
+      // An ordinary remembered session, as any other sign-in: seven days, rolled forward while in use. A person who
+      // opens this host directly after an issuer's sign-in has no parent page to sign them in again.
+      const session = await ctx.context.internalAdapter.createSession(userId);
+      await setSessionCookie(ctx, { session, user });
       return ctx.json({ ok: true });
     }),
   },
@@ -328,14 +329,16 @@ export async function ensureHumanAuthSchema(opts: HumanDriver): Promise<void> {
 }
 
 export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth> {
-  const { schema, db, queryable, ensureTables } = await openHumanStore(opts);
+  const { schema, db, queryable, ensureTables, dateColumns } = await openHumanStore(opts);
 
   /*
    * THE OPTIONS, from the ONE pure builder — the same object the schema
    * renderer builds, over the same schema-qualified handle (that handle is
    * where `compileMigrations` gets its `auth.` prefixes).
    */
-  const auth = betterAuth(humanAuthOptions(opts, db));
+  const options = humanAuthOptions(opts, db);
+  dateColumns(getSchema(options));
+  const auth = betterAuth(options);
   await ensureTables(auth.options);
 
   return {
@@ -361,6 +364,32 @@ export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth
         const api = auth.api as unknown as { trustedSession(input: { body: { userId: string }; returnHeaders: true }): Promise<{ headers: Headers }> };
         return (await api.trustedSession({ body: { userId }, returnHeaders: true })).headers.getSetCookie();
       },
+    },
+  };
+}
+
+/**
+ * BETTER AUTH'S DATES AS DATES. The app reads every TIMESTAMP/TIMESTAMPTZ as an ISO string, on whichever driver
+ * (services/app/lib/platform/db.ts), and hands Better Auth that same driver. Better Auth's Postgres adapter takes the
+ * driver's Dates as they come and compares `expiresAt < new Date()`: with a string that is never true, so an expired
+ * session was never refused and none was ever renewed. Its handle therefore turns its own date columns (by Better
+ * Auth's schema, joined ones `_joined_<model>_<column>` included) back into Dates, whatever the driver returns.
+ */
+function asDates(): { plugin: KyselyPlugin; columns: (schema: ReturnType<typeof getSchema>) => void } {
+  const names = new Set<string>();
+  const isDate = (key: string) => names.has(key) || names.has(key.replace(/^_joined_[^_]+_/, ''));
+  return {
+    columns(schema) {
+      for (const table of Object.values(schema)) for (const [name, field] of Object.entries(table.fields)) if (field.type === 'date') names.add(name);
+    },
+    plugin: {
+      transformQuery: (args) => args.node,
+      transformResult: async ({ result }) => ({ ...result, rows: result.rows.map((row) => {
+        if (!row || typeof row !== 'object') return row;
+        const out: Record<string, unknown> = { ...row };
+        for (const [key, value] of Object.entries(out)) if (typeof value === 'string' && isDate(key)) out[key] = new Date(value);
+        return out;
+      }) }),
     },
   };
 }
@@ -402,7 +431,8 @@ async function openHumanStore(opts: HumanDriver) {
   const already = await run(schemaProbe).catch(() => ({ rows: [] as unknown[] }));
   // The schema exists before Better Auth's migrations run inside it.
   if (already.rows.length === 0) await run(create);
-  const db = raw.withSchema(schema);
+  const dates = asDates();
+  const db = raw.withPlugin(dates.plugin).withSchema(schema);
 
   /** The handle our own reads need: a parameterised query, whichever driver we were handed. */
   const queryable: Queryable = {
@@ -412,7 +442,7 @@ async function openHumanStore(opts: HumanDriver) {
     },
   };
   return {
-    schema, db, queryable,
+    schema, db, queryable, dateColumns: dates.columns,
     // Better Auth's migration introspects WITHOUT the schema qualifier, so on a
     // second boot against an existing `auth.*` it would try to create the tables
     // again and fail. Every boot after the first therefore skips it by asking
