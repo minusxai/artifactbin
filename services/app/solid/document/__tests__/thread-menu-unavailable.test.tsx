@@ -3,14 +3,17 @@
  * The thread menu is a lazy chunk. When it cannot be fetched (the local preview restarted while it loaded, a dropped
  * connection), the thread stays on screen with its actions trigger standing in, unavailable, and nothing is thrown.
  */
-import { expect, it, vi } from 'vitest';
+import { beforeAll, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/dom';
 import { render } from '../../__tests__/helpers';
 import { AnnotationLayer } from '../AnnotationLayer';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import type { AnnotationWire } from '@/lib/annotations';
+import { loadCommentDisplay } from '../comment-display';
 
 vi.mock('../../ui/Menu', () => { throw new TypeError('Failed to fetch dynamically imported module: /bundle/Menu.js'); });
+// The comment display is a lazy chunk too (../comment-display); this test is about the menu's.
+beforeAll(() => loadCommentDisplay());
 
 const ANN = { id: 'ann_1', status: 'open', anchor: null, orphaned: false, anchor_version: 1, snippet: 'Revenue', quote: null, range: null, quote_found: null,
   thread: [{ id: 'ann_1', body: 'is this right?', author: { kind: 'human', label: 'You', transport: 'browser', user_id: null, image: null }, created_at: '2026-10-14T00:00:00Z' }],

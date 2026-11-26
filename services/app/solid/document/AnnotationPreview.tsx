@@ -19,7 +19,7 @@ import PenLine from 'lucide-solid/icons/pen-line';
 import Reply from 'lucide-solid/icons/reply';
 import X from 'lucide-solid/icons/x';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
-import { parseMarkdownLite, plainText } from '@/lib/annotations/markdown-lite';
+import { commentPlainText } from './comment-display';
 import { agentNameColor } from '../lib/agent-identity';
 import { Avatar } from '../ui/Avatar';
 import { Button } from '../ui/Button';
@@ -46,8 +46,9 @@ const VIEW_COMMENT_REPLY_ROOM = 360;
 /** Offline, a name is a label someone typed, not a profile to visit. */
 export const CommentsOffline = createContext(false);
 
-/** What a clamped surface shows: the plain text, never two lines spent on a fence or a bullet. */
-export const previewText = (body: string) => plainText(parseMarkdownLite(body));
+/** What a clamped surface shows: the plain text, never two lines spent on a fence or a bullet ('' until the display
+ * chunk arrives; a tracked read, so the preview fills in then). */
+export const previewText = (body: string) => commentPlainText(body);
 /** What a folded comment or thread keeps: the sentence it opens with. */
 export const firstLine = (body: string) => previewText(body).split('\n', 1)[0] ?? '';
 

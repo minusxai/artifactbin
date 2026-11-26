@@ -1,4 +1,5 @@
 import {buildHostComments,buildPortableChrome} from './build-portable-chrome.server';
+import {slimEntities} from './slim-entities.server';
 import {suppliedOrCompiled} from './assets-supply.server';
 import {hostCommentsPath} from './host-comments-address.server';
 import {build,type PluginBuild,type Plugin} from 'esbuild';
@@ -30,9 +31,6 @@ const bundled=async(extra:Parameters<typeof build>[0],empty='HTML runtime build 
 const esm=(file:URL,extra:Parameters<typeof build>[0]={})=>bundled({entryPoints:[fileURLToPath(file)],format:'esm',...extra});
 /** Resolve the bare `filter` import as the external `path`: a module the page's import map supplies. */
 const external=(name:string,filter:RegExp,path:string):Plugin=>({name,setup(builder:PluginBuild){builder.onResolve({filter},()=>({path,external:true}));}});
-/** markdown-it's `entities` import as lib/markdown's slim decoder: the redirect scripts/lib/slim-entities.mjs gives every
- * other build of that module (a library cannot import the scripts layer), proved by build.test.ts. */
-const slimEntities:Plugin={name:'slim-entities',setup(builder){builder.onResolve({filter:/^entities$/},({importer})=>/[\\/]node_modules[\\/]markdown-it[\\/]/.test(importer)?{path:fileURLToPath(new URL('../markdown/entities.ts',import.meta.url))}:undefined);}};
 async function compile():Promise<HtmlRuntimeAssets>{
  const readerSource=await esm(new URL('./browser-reader.ts',import.meta.url),{external:['@afbin/chrome','@afbin/portable','@afbin/morph'],banner:{js:`const __AF_RUNTIME_CONFIG__=(()=>{const supplied=document.querySelector('[data-af="runtime"]');return supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location.pathname,revision:'local',backends:[],offline:true};})();`}});
  // `@afbin/state` owns the page's one local-state document; `@afbin/apollo` imports it rather than carrying a second copy.

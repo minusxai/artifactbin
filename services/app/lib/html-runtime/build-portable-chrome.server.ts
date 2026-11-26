@@ -5,6 +5,7 @@ import {Scanner} from '@tailwindcss/oxide';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {slimEntities} from './slim-entities.server';
 /**
  * The app's own UI compiled for use OUTSIDE the app's Vite build: the Solid trees a page or another shell mounts in a
  * trusted shadow root (lib/ui-runtime/trusted-overlay-host), and the app's Tailwind sheet they carry. Two modules:
@@ -33,7 +34,7 @@ const solid:Plugin={name:'trusted-solid',setup(builder){builder.onLoad({filter:/
 /** One ES module: `entry`'s exports and `stylesheet`, the sheet its trusted roots adopt. */
 async function buildTrustedModule(entry:string,exports:string,stylesheet:string,plugins:Plugin[]=[]):Promise<string>{
  const file=fileURLToPath(entry);
- const result=await build({bundle:true,minify:true,write:false,platform:'browser',conditions:['browser'],target:'es2022',format:'esm',loader:{'.png':'dataurl'},plugins:[solid,...plugins],stdin:{contents:`export {${exports}} from ${JSON.stringify(file)};export const stylesheet=${JSON.stringify(stylesheet)};`,resolveDir:process.cwd(),loader:'ts'}});
+ const result=await build({bundle:true,minify:true,write:false,platform:'browser',conditions:['browser'],target:'es2022',format:'esm',loader:{'.png':'dataurl'},plugins:[solid,slimEntities,...plugins],stdin:{contents:`export {${exports}} from ${JSON.stringify(file)};export const stylesheet=${JSON.stringify(stylesheet)};`,resolveDir:process.cwd(),loader:'ts'}});
  if(!result.outputFiles?.[0])throw Error(`Trusted UI build of ${path.basename(file)} is empty`);
  return result.outputFiles[0].text;
 }

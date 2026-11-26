@@ -10,8 +10,7 @@ import Code from 'lucide-solid/icons/code';
 import Italic from 'lucide-solid/icons/italic';
 import Link2 from 'lucide-solid/icons/link-2';
 import List from 'lucide-solid/icons/list';
-import type { MdMarker } from '@/lib/annotations';
-import { mountCommentEditor, type MentionQuery } from './comment-editor';
+import { mountCommentEditor, type MdMarker, type MentionQuery } from './comment-editor';
 import type { ArtifactBackend } from '@/lib/artifact-backend';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Field';
@@ -70,7 +69,7 @@ export function CommentMarkdownField(props: CommentMarkdownFieldProps): JSX.Elem
   const apply = (marker:MdMarker) => { if(marker==='link'){setLinkOpen(value=>!value);return;} editor?.format(marker); };
   onMount(() => {
     const placeholder = props.placeholder ?? (canMention() ? 'Protip: Use @ to mention people' : 'Write a comment ...');
-    editor=untrack(()=>mountCommentEditor(mount,{value:()=>props.value,label:props.label,placeholder,onChange:props.onChange,
+    editor=untrack(()=>mountCommentEditor(mount,{value:()=>props.value,label:props.label,placeholder,artifactId:props.artifactId,onChange:props.onChange,
       onMention:query=>setMention(canMention()&&props.backend?query:null),
       onKey:event=>{
         if(event.isComposing)return false;

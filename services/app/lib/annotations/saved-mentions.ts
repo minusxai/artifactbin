@@ -1,18 +1,8 @@
-import {parseMarkdownLite,type MdNode,type MdInline} from './markdown-lite';
 import type {Queryable} from '@artifactbin/contracts/db';
 import type { ArtifactRow } from '@/lib/artifacts';
 import type { AccessActor } from '@/lib/accounts';
 import {invitePeople} from '@/lib/artifacts';
-import {personMentionId} from '../document';
-
-/** The people a comment body mentions (`/api/people/<id>` links, or the stored `/people/<id>` form), in order. */
-function mentionIds(body:string):string[]{
- const ids:string[]=[];
- const inline=(nodes:MdInline[])=>{for(const n of nodes){const id=n.kind==='link'?personMentionId(n.href):null;if(id)ids.push(id);else if(n.kind==='strong'||n.kind==='em')inline(n.children);}};
- const blocks=(nodes:MdNode[])=>{for(const n of nodes){if((n.kind==='paragraph'||n.kind==='heading'))inline(n.children);else if(n.kind==='list')n.items.forEach(i=>blocks(i.children));else if(n.kind==='quote')blocks(n.children);}};
- blocks(parseMarkdownLite(body));
- return ids;
-}
+import { mentionIds } from './mention-ids';
 
 /**
  * Invite (and so notify) the people a saved comment mentions. `previous` is the text an EDIT replaced:

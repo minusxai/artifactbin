@@ -3,6 +3,7 @@ import { createEffect, createSignal, Show, type JSX } from 'solid-js';
 import { foldFromMeasure } from '@/lib/annotations/comment-folds';
 import { Button } from '../ui/Button';
 import { CommentMarkdown } from './CommentMarkdown';
+import { commentDisplay } from './comment-display';
 
 /** The rail measures rendered markdown and clamps only bodies over ten laid-out lines. */
 export function CommentFoldingBody(props: { text: string; foldable: boolean; visibleLines?: number }): JSX.Element {
@@ -10,7 +11,8 @@ export function CommentFoldingBody(props: { text: string; foldable: boolean; vis
   const [fold, setFold] = createSignal({ overflowing: false, lines: 0, maxHeight: 0 });
   const [shown, setShown] = createSignal(false);
   createEffect(() => {
-    void props.text;
+    // Measured again when the text changes and once the display chunk has rendered it.
+    void props.text; void commentDisplay();
     queueMicrotask(() => {
       if (!measured?.isConnected) return;
       const line = measured.querySelector('p, li, pre') ?? measured;

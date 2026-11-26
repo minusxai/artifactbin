@@ -344,9 +344,12 @@ it('ships the host comments module apart, at the pinned address the host module 
  // The app's discussion (Solid, the comment editor, the app's sheet), loaded only when a shell asks for comments
  // (243,000 B gzipped measured 2026-11-11, the comment editor most of it).
  expect(gzipSync(comments).byteLength).toBeLessThanOrEqual(256*1024);
- // In this one file nothing can be a lazy chunk: lib/markdown's Prism grammars stay out (build-portable-chrome.server
- // noCodeGrammars), so code shows unhighlighted here (the app keeps highlighting).
+ // Comments read and write Markdown through lib/markdown (parse, the HTML writer, the serializer; 257,792 B gzipped
+ // measured 2026-11-26), and in this one file nothing can be a lazy chunk: lib/markdown's Prism grammars stay out
+ // (build-portable-chrome.server noCodeGrammars), so code shows unhighlighted here (the app keeps highlighting), and
+ // the full entity table stays out (the slim decoder decodes a rare name as typed).
  expect(comments).not.toContain('template-string');
+ expect(comments).not.toContain('CounterClockwiseContourIntegral');
  // The host module imports exactly this build's comments, never bundles them.
  expect(assets.host).toContain(hostCommentsPath(comments));
  expect(assets.host).not.toMatch(/data-trusted-ui|ProseMirror/);
