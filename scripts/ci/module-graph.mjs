@@ -82,7 +82,6 @@ const DOCUMENT_ENTRIES = ['', 'server', 'csp-extensions', 'social-preview'];
 const DOCUMENT_BROWSER_IMPORTERS = [
   'services/app/solid/',
 
-  'services/app/lib/annotations/markdown-lite.ts',
   'services/app/lib/artifact-backend/browser-artifact-write.ts',
 ];
 const DOCUMENT_BROWSER_LEAVES = [
@@ -109,7 +108,6 @@ const BUNDLED_IMPORTERS = [
   'services/app/solid/', 'services/app/web/',   'services/app/lib/html-components/', 'services/app/skills/',
   'services/app/lib/agent-copy/agent-copy.ts',
   'services/app/lib/agent-copy/getting-started.ts',
-  'services/app/lib/annotations/markdown-lite.ts',
   'services/app/lib/annotations/pages.ts',
   'services/app/lib/annotations/remote-reply.ts',
   'services/app/lib/artifact-backend/reader-http.ts',
@@ -154,7 +152,7 @@ const BUNDLED_LEAVES = {
   'lib/html-component-specs': ['chart-spec', 'comparison', 'data-source', 'isometric-spec', 'read-failure'],
   'lib/ui-runtime': ['dialog-shell', 'file-display', 'person-face', 'popper', 'popup-dismiss', 'tooltip-core', 'trusted-overlay-host', 'trusted-portal', 'trusted-ui-styles'],
   'lib/html-reader': ['ast-path', 'contract', 'document-endpoint', 'document-sources', 'edit-bar', 'follow-version', 'frame-bridge/parent', 'frame-markup', 'frame-navigation', 'frame-session', 'frame-src', 'host-comments-contract', 'reader-mode'],
-  'lib/annotations': ['comment-folds', 'markdown-lite', 'pages', 'region-comment', 'remote-reply', 'session-mentions'],
+  'lib/annotations': ['comment-folds', 'pages', 'region-comment', 'remote-reply', 'session-mentions'],
   'lib/artifact-backend': ['reader-http', 'region-http'],
   'lib/capture': [],
   'lib/chart': ['chart-theme'],
@@ -169,7 +167,7 @@ const BUNDLED_LEAVES = {
   // carries the server's parse5 readers and compaction. The page's link dialog checks a URL through `href` alone.
   // `cells` (a dataset text cell's text, no ProseMirror) is the page library @afbin/collab's door.
   'lib/live-regions': ['native-browser', 'native-markdown', 'cells', 'href'],
-  'lib/html-runtime': ['bridge/selection-contract', 'native-editing-behavior', 'native-code-presentation', 'browser-portable', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
+  'lib/html-runtime': ['bridge/selection-contract', 'native-editing-behavior', 'browser-portable', 'portable', 'portable-chrome-contract', 'portable-source', 'source-relationship'],
   'lib/http': [
     'app-build', 'app-pages', 'intent', 'live-stream', 'login-href', 'retry', 'retry-lazily', 'safe-redirect',
     'shared-request', 'urls',

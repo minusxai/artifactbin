@@ -5,6 +5,7 @@ import {Scanner} from '@tailwindcss/oxide';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
+import {slimEntities} from './slim-entities.server';
 /**
  * The app's own UI compiled for use OUTSIDE the app's Vite build: the Solid trees a page or another shell mounts in a
  * trusted shadow root (lib/ui-runtime/trusted-overlay-host), and the app's Tailwind sheet they carry. Two modules:
@@ -31,9 +32,9 @@ const solid:Plugin={name:'trusted-solid',setup(builder){builder.onLoad({filter:/
  return {contents:output.code,loader:'js',resolveDir:path.dirname(args.path)};
 });}};
 /** One ES module: `entry`'s exports and `stylesheet`, the sheet its trusted roots adopt. */
-async function buildTrustedModule(entry:string,exports:string,stylesheet:string):Promise<string>{
+async function buildTrustedModule(entry:string,exports:string,stylesheet:string,plugins:Plugin[]=[]):Promise<string>{
  const file=fileURLToPath(entry);
- const result=await build({bundle:true,minify:true,write:false,platform:'browser',conditions:['browser'],target:'es2022',format:'esm',loader:{'.png':'dataurl'},plugins:[solid],stdin:{contents:`export {${exports}} from ${JSON.stringify(file)};export const stylesheet=${JSON.stringify(stylesheet)};`,resolveDir:process.cwd(),loader:'ts'}});
+ const result=await build({bundle:true,minify:true,write:false,platform:'browser',conditions:['browser'],target:'es2022',format:'esm',loader:{'.png':'dataurl'},plugins:[solid,slimEntities,...plugins],stdin:{contents:`export {${exports}} from ${JSON.stringify(file)};export const stylesheet=${JSON.stringify(stylesheet)};`,resolveDir:process.cwd(),loader:'ts'}});
  if(!result.outputFiles?.[0])throw Error(`Trusted UI build of ${path.basename(file)} is empty`);
  return result.outputFiles[0].text;
 }
@@ -49,9 +50,19 @@ export async function buildPortableChrome():Promise<string>{
  return buildTrustedModule(new URL('../../solid/document/browser-portable-chrome.tsx',import.meta.url).href,'mountPortableChrome',stylesheet);
 }
 /**
+ * lib/markdown's Prism grammars as none: code renders as plain `<pre><code>` and the editor decorates nothing. The host
+ * comments module is one file (no lazy chunk can stay out of it), and with lib/markdown's parser and serializer, which
+ * comments read and write through, Prism (about 9 KB gzipped) no longer fits its budget (build.test.ts). The app's own
+ * comments keep highlighting: there Prism is a lazy chunk.
+ */
+const noCodeGrammars:Plugin={name:'no-code-grammars',setup(builder){
+ builder.onResolve({filter:/^\.\/prism-grammars$/},({importer})=>/[\\/]lib[\\/]markdown[\\/]/.test(importer)?{path:'prism-grammars',namespace:'no-code-grammars'}:undefined);
+ builder.onLoad({filter:/.*/,namespace:'no-code-grammars'},()=>({contents:'export default {languages:{},tokenize:()=>[]};',loader:'js'}));
+}};
+/**
  * The host comments module: the app's sheet without fonts (a shell on the app's origin loads `/af/fonts` faces itself,
- * and a shell that sets the theme tokens names its own families).
+ * and a shell that sets the theme tokens names its own families), and no code highlighting (noCodeGrammars above).
  */
 export async function buildHostComments():Promise<string>{
- return buildTrustedModule(new URL('../../solid/document/browser-host-comments.tsx',import.meta.url).href,'mountHostComments',await appStylesheet());
+ return buildTrustedModule(new URL('../../solid/document/browser-host-comments.tsx',import.meta.url).href,'mountHostComments',await appStylesheet(),[noCodeGrammars]);
 }

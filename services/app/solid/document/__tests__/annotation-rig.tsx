@@ -20,9 +20,11 @@ import { TrustedUi } from '../../components/TrustedUi';
 import { AnnotationLayer, type AnnotationLayerProps } from '../AnnotationLayer';
 import { preloadScreenshotUpload } from '../AnnotationComposer';
 import { preloadThreadMenu } from '../AnnotationThread';
+import { loadCommentDisplay } from '../comment-display';
 
-// The rail's delete menu and the upload fallback are lazy chunks: have them in before a test renders.
-beforeAll(() => Promise.all([preloadThreadMenu(), preloadScreenshotUpload()]));
+// The rail's delete menu, the upload fallback and the comment display (../comment-display; its cold path has its own
+// test, comment-display.test.tsx) are lazy chunks: have them in before a test renders.
+beforeAll(() => Promise.all([preloadThreadMenu(), preloadScreenshotUpload(), loadCommentDisplay()]));
 
 export const NONCE = 'n'.repeat(32);
 

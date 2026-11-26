@@ -38,6 +38,7 @@ import { CommentRail } from './AnnotationRail';
 import { CommentImagesProvider } from './CommentImageAttach';
 import { createReplyDrafts } from './reply-drafts';
 import { PersonMentionProvider } from './PersonMention';
+import { CommentDocument } from './comment-display';
 import { connectFrameAnnotations } from './annotation-frame';
 import { createCommentLink } from './create-reader-discussion';
 import { createCommentDraft } from './annotation-draft';
@@ -276,7 +277,7 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
       : { left: 0, top: topOffset(), width: width - railWidth() };
   });
 
-  return <CommentImagesProvider backend={backend} editId={() => props.editId}><PersonMentionProvider artifactId={props.id} backend={backend} revision={props.membershipRevision}>
+  return <CommentImagesProvider backend={backend} editId={() => props.editId}><PersonMentionProvider artifactId={props.id} backend={backend} revision={props.membershipRevision}><CommentDocument.Provider value={props.id}>
     <CommentsOffline.Provider value={backend.mode === 'offline'}>
       <style>{CAPTURE_CHROME_CSS}</style>
       <Show when={draft.capture.busy() && !draft.selection()}>
@@ -328,5 +329,5 @@ export function AnnotationLayer(props: AnnotationLayerProps): JSX.Element {
 
       <Show when={deleting()}>{(pending) => <ConfirmDelete thread={pending().thread} remove={() => threads.remove(pending().id)} onClose={() => setDeleting(null)} />}</Show>
     </CommentsOffline.Provider>
-  </PersonMentionProvider></CommentImagesProvider>;
+  </CommentDocument.Provider></PersonMentionProvider></CommentImagesProvider>;
 }

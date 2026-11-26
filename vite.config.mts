@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs';
 import { defineConfig, type Plugin } from 'vite';
 import { describePrecompression, precompressTree } from './services/app/scripts/precompress.mjs';
 import { declaredLucideIcons } from './scripts/lib/cached-solid.mjs';
+import { slimEntitiesVite } from './scripts/lib/slim-entities.mjs';
 
 const webRoot = path.resolve(import.meta.dirname, 'services/app/web');
 const outDir = path.resolve(import.meta.dirname, 'services/app/dist/web');
@@ -122,7 +123,9 @@ export default defineConfig({
   // Solid-transform all ~2,000 of them to keep a few dozen (2,671 transforms, 55% of the build's 3.5s, locally), which
   // made the shell size guard the slowest file of its pr fast runner (15.6s on CI). An icon missing from the list fails
   // the build by name, as it fails the type check.
-  plugins: [declaredLucideIcons(import.meta.dirname), appFontFaces(), solid({ include: [/\/services\/app\/(?!node_modules\/).*\.(?:tsx|jsx)$/, /\/node_modules\/@solidjs\/router\/.*\.jsx$/, /\/node_modules\/lucide-solid\/.*\.jsx$/], hot: false }), tailwindcss(), precompressAssets()],
+  // markdown-it's `entities` import resolves to lib/markdown's slim decoder (comments read Markdown through it), as in
+  // every build that bundles the module.
+  plugins: [slimEntitiesVite(), declaredLucideIcons(import.meta.dirname), appFontFaces(), solid({ include: [/\/services\/app\/(?!node_modules\/).*\.(?:tsx|jsx)$/, /\/node_modules\/@solidjs\/router\/.*\.jsx$/, /\/node_modules\/lucide-solid\/.*\.jsx$/], hot: false }), tailwindcss(), precompressAssets()],
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(import.meta.dirname, 'services/app') },

@@ -535,6 +535,20 @@ body {
 .comment-heading[data-level='2'], .comment-rich-editor h2 { font-size: 18px; }
 .comment-heading[data-level='3'], .comment-rich-editor h3 { font-size: 16px; }
 
+/* What comments gained with lib/markdown's elements, in the thread ([data-markdown]) and the box alike: task lists,
+   tables, rules and images, at the rail's compact size. */
+:is([data-markdown], .comment-rich-editor) ul.mx-md-check-list { list-style: none; padding-left: 0; }
+:is([data-markdown], .comment-rich-editor) li[role="checkbox"] { position: relative; list-style: none; padding-left: 1.5em; }
+:is([data-markdown], .comment-rich-editor) li[role="checkbox"]::before { content: ''; position: absolute; left: 0; top: .3em; width: 1em; height: 1em; box-sizing: border-box; border: 1px solid var(--color-edge-bright); border-radius: 3px; background: var(--color-surface); }
+:is([data-markdown], .comment-rich-editor) li[aria-checked="true"]::before { border-color: var(--color-accent); background: var(--color-accent); }
+:is([data-markdown], .comment-rich-editor) li[aria-checked="true"]::after { content: ''; position: absolute; left: .36em; top: .45em; width: .3em; height: .55em; border: solid var(--color-surface); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+:is([data-markdown], .comment-rich-editor) .mx-md-table-scroll { max-width: 100%; overflow-x: auto; }
+:is([data-markdown], .comment-rich-editor) table { border-collapse: collapse; font-size: .92em; }
+:is([data-markdown], .comment-rich-editor) :is(th, td) { border: 1px solid var(--color-edge); padding: 2px 8px; text-align: start; vertical-align: top; }
+:is([data-markdown], .comment-rich-editor) th { background: var(--color-raised); font-weight: 600; }
+:is([data-markdown], .comment-rich-editor) hr { border: 0; border-top: 1px solid var(--color-edge); }
+:is([data-markdown], .comment-rich-editor) img { display: inline; max-width: 100%; border-radius: var(--radius-chip); }
+
 .comment-editor-tools { display: flex; align-items: center; min-height: 28px; margin-bottom: 6px; }
 .comment-editor-context { min-width: 0; overflow: hidden; white-space: nowrap; }
 .comment-editor-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 2px; margin-left: auto; }

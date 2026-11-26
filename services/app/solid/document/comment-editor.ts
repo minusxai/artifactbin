@@ -1,176 +1,147 @@
-/** Tiptap comment adapter. Markdown is the public value; DOM never crosses the wire. */
-import {
-  type Node as PMNode,
-  type Mark,
-  Slice,
-} from "prosemirror-model";
+/**
+ * The comment box: a Tiptap editor on lib/markdown's shared elements (./editor-presets). Markdown is the public value
+ * and DOM never crosses the wire: a body loads through the module's one parser (`parse`, images on) and saves through
+ * its serializer, so a body nobody edits is never rewritten (only an edit publishes), and canonical text comes back
+ * byte for byte. What comments add around the module:
+ *
+ * - A person or agent-session mention link is one Mention atom while edited, and a link again when saved.
+ * - Whitespace Markdown cannot show is not saved as references: a line's leading and trailing spaces are dropped,
+ *   and spaces just inside bold, italic or strikethrough move outside it (`a** bold **b` saves as `a **bold** b`).
+ *   Comment bodies are plain text agents read; `&#32;` would be noise in them.
+ * - Typing a closed `**bold**`, `*italic*`/`_italic_`, `` `code` `` or `[text](href)` turns it into its mark.
+ */
+import { Slice, type Node as PMNode } from "prosemirror-model";
 import { EditorState, TextSelection, type Command } from "prosemirror-state";
 import { Editor, getSchema } from "@tiptap/core";
-import { commentExtensions } from "./editor-presets";
 import { toggleMark } from "prosemirror-commands";
 import { wrapInList } from "prosemirror-schema-list";
-import {
-  parseMarkdownLite,
-  parseInline,
-  safeHref,
-  type MdNode,
-  type MdInline,
-  type MdMarker,
-} from "@/lib/annotations/markdown-lite";
-import { isSessionMentionHref } from "@/lib/annotations/session-mentions";
-import { isPersonMentionHref } from "@/lib/document/person-mentions";
+import type { MarkdownMark, MarkdownNode } from "@/lib/markdown/display";
+import { parse, serialize } from "@/lib/markdown/editor";
+import { linkAllowed } from "@/lib/markdown/href";
+import { commentExtensions, isMentionHref } from "./editor-presets";
+import { commentImageAddress, uploadAddress } from "./comment-display";
+
+/** The composer toolbar's five verbs. */
+export type MdMarker = "bold" | "italic" | "code" | "link" | "list";
 
 const commentSchema = getSchema(commentExtensions());
-function inlines(nodes: MdInline[], marks: Mark[] = []): PMNode[] {
-  return nodes.flatMap((node) => {
-    if (node.kind === "text")
-      return node.text ? [commentSchema.text(node.text, marks)] : [];
-    if (node.kind === "break") return [commentSchema.node("hardBreak")];
-    if (node.kind === "code")
-      return node.text
-        ? [
-            commentSchema.text(node.text, [
-              ...marks,
-              commentSchema.mark("code"),
-            ]),
-          ]
-        : [];
-    if (
-      node.kind === "link" &&
-      (isSessionMentionHref(node.href) || isPersonMentionHref(node.href))
-    ) {
-      const label = node.children
-        .map((child) => (child.kind === "text" ? child.text : ""))
-        .join("");
-      return [commentSchema.node("mention", { label, href: node.href })];
+const linkOf = (node: MarkdownNode) => node.marks?.find((mark) => mark.type === "link");
+
+/** Inline JSON with each mention link as one Mention atom (a link whose label is split by formatting stays one). */
+function withMentions(nodes: readonly MarkdownNode[]): MarkdownNode[] {
+  const out: MarkdownNode[] = [];
+  let open: { node: MarkdownNode; link: MarkdownMark } | null = null;
+  for (const node of nodes) {
+    const link = node.type === "text" ? linkOf(node) : undefined;
+    if (!link || !isMentionHref(link.attrs?.href ?? "")) {
+      open = null;
+      out.push(node.content ? { ...node, content: withMentions(node.content) } : node);
+      continue;
     }
-    return inlines(node.children, [
-      ...marks,
-      commentSchema.mark(
-        node.kind === "strong" ? "strong" : node.kind === "em" ? "italic" : "link",
-        node.kind === "link" ? { href: node.href } : undefined,
-      ),
-    ]);
-  });
-}
-function block(node: MdNode): PMNode {
-  if (node.kind === 'heading') return commentSchema.node('heading',{level:node.level},inlines(node.children));
-  if (node.kind === "paragraph")
-    return commentSchema.node("paragraph", null, inlines(node.children));
-  if (node.kind === "code_block")
-    return commentSchema.node(
-      "codeBlock",
-      { language: node.lang },
-      node.text ? commentSchema.text(node.text) : undefined,
-    );
-  if (node.kind === "quote")
-    return commentSchema.node("blockquote", null, node.children.map(block));
-  return commentSchema.node(
-    node.ordered ? "orderedList" : "bulletList",
-    null,
-    node.items.map((item) =>
-      commentSchema.node("listItem", null, item.children.map(block)),
-    ),
-  );
-}
-export function commentDocument(markdown: string): PMNode {
-  const nodes = parseMarkdownLite(markdown).map(block);
-  return commentSchema.node(
-    "doc",
-    null,
-    nodes.length ? nodes : [commentSchema.node("paragraph")],
-  );
-}
-function inlineMarkdown(node: PMNode): string {
-  const nodes: PMNode[] = [];
-  node.forEach((child) => nodes.push(child));
-  const escape = (text: string) =>
-    text
-      .replace(/[\\`*_\[\]>]/g, "\\$&")
-      .replace(/(^|\n)([ \t]*)([-+#])/g, "$1$2\\$3")
-      .replace(/(^|\n)([ \t]*)(\d+)\./g, "$1$2$3\\.");
-  function render(children: PMNode[], depth: number, inCode = false): string {
-    let result = "";
-    for (let i = 0; i < children.length;) {
-      const child = children[i],
-        mark = child.marks[depth];
-      if (mark) {
-        let end = i + 1;
-        while (end < children.length && children[end].marks[depth]?.eq(mark))
-          end++;
-        const body = render(
-          children.slice(i, end),
-          depth + 1,
-          inCode || mark.type.name === "code",
-        );
-        if (mark.type.name === "link")
-          result += `[${body}](${mark.attrs.href})`;
-        else if (mark.type.name === "code") {
-          const fence = "`".repeat(
-            Math.max(
-              0,
-              ...Array.from(body.matchAll(/`+/g), (m) => m[0].length),
-            ) + 1,
-          );
-          result += fence + body + fence;
-        } else {
-          const delimiter = mark.type.name === "strong" ? "**" : "_";
-          const leading = /^\s*/.exec(body)![0],
-            trailing = /\s*$/.exec(body)![0],
-            trimmed = body.trim();
-          result += trimmed
-            ? leading + delimiter + trimmed + delimiter + trailing
-            : body;
-        }
-        i = end;
-      } else {
-        result +=
-          child.type.name === "mention"
-            ? `[${escape(child.attrs.label)}](${child.attrs.href})`
-            : child.type.name === "hardBreak"
-              ? "\n"
-              : inCode
-                ? (child.text ?? "")
-                : escape(child.text ?? "");
-        i++;
-      }
+    if (open && open.link.attrs?.href === link.attrs?.href) {
+      (open.node.attrs as { label: string }).label += node.text ?? "";
+      continue;
     }
-    return result;
+    const marks = node.marks!.filter((mark) => mark.type !== "link");
+    const mention: MarkdownNode = { type: "mention", attrs: { label: node.text ?? "", href: link.attrs!.href }, ...(marks.length ? { marks } : {}) };
+    out.push(mention);
+    open = { node: mention, link };
   }
-  return render(nodes, 0);
+  return out;
+}
+
+const TEXTBLOCKS = new Set(["paragraph", "heading", "tableCell", "tableHeader"]);
+const isCode = (node: MarkdownNode) => !!node.marks?.some((mark) => mark.type === "code");
+const EMPHASIS = new Set(["bold", "italic", "strike"]);
+
+/** Spaces at an emphasis run's edges, moved outside the run. */
+function emphasisEdges(nodes: MarkdownNode[]): MarkdownNode[] {
+  for (const type of EMPHASIS) {
+    const has = (node: MarkdownNode | undefined) => !!node?.marks?.some((mark) => mark.type === type);
+    for (let i = 0; i < nodes.length; i++) {
+      if (!has(nodes[i]) || has(nodes[i - 1])) continue;
+      let end = i;
+      while (has(nodes[end + 1])) end++;
+      const strip = (at: number, side: "start" | "end") => {
+        const node = nodes[at]!;
+        if (node.type !== "text" || isCode(node)) return 0;
+        const text = node.text!, kept = side === "start" ? text.replace(/^[ \t]+/, "") : text.replace(/[ \t]+$/, "");
+        if (kept === text || !kept) return 0;
+        const space: MarkdownNode = { ...node, text: side === "start" ? text.slice(0, text.length - kept.length) : text.slice(kept.length), marks: node.marks!.filter((mark) => mark.type !== type) };
+        if (!space.marks!.length) delete space.marks;
+        nodes.splice(at, 1, ...(side === "start" ? [space, { ...node, text: kept }] : [{ ...node, text: kept }, space]));
+        return 1;
+      };
+      const shift = strip(i, "start");
+      strip(end + shift, "end");
+      i = end + shift + 1;
+    }
+  }
+  return nodes;
+}
+
+/** A textblock's inline content without the leading and trailing spaces of its lines. */
+function trimLines(nodes: MarkdownNode[]): MarkdownNode[] {
+  const out = [...nodes];
+  const edge = (at: number, side: "start" | "end") => {
+    const node = out[at];
+    if (node?.type !== "text" || isCode(node)) return false;
+    const text = node.text!.replace(side === "start" ? /^[ \t]+/ : /[ \t]+$/, "");
+    if (text) { out[at] = { ...node, text }; return false; }
+    out.splice(at, 1);
+    return true;
+  };
+  for (let line = 0; line <= out.length; line++) {
+    // `line` is the start of a line: the content's start, or just after a hard break.
+    if (line > 0 && out[line - 1]?.type !== "hardBreak") continue;
+    while (edge(line, "start"));
+    let end = line;
+    while (end < out.length && out[end]!.type !== "hardBreak") end++;
+    while (end > line && edge(end - 1, "end")) end--;
+  }
+  return out;
+}
+
+/** The editor's document as the module's JSON: mentions as links, and no whitespace Markdown would encode. */
+function savedJson(node: MarkdownNode): MarkdownNode {
+  if (node.type === "mention") {
+    const attrs = node.attrs as { label: string; href: string };
+    return { type: "text", text: attrs.label, marks: [...(node.marks ?? []), { type: "link", attrs: { href: attrs.href, title: null } }] };
+  }
+  if (!node.content) return node;
+  const content = node.content.map(savedJson).filter((child) => child.type !== "text" || child.text);
+  // Prose only: a code block's text is kept exactly.
+  return { ...node, content: TEXTBLOCKS.has(node.type) ? trimLines(emphasisEdges(content)) : content };
+}
+
+const commentNode = (json: MarkdownNode) => commentSchema.nodeFromJSON(json);
+/**
+ * A body as the editor's document. Spaces ending the body stay at the end of its last paragraph (Markdown drops
+ * them), so a reply prefilled with a mention and a space continues after the space.
+ */
+export function commentDocument(markdown: string): PMNode {
+  const doc = parse(markdown, { images: true });
+  const content = doc.content.length ? withMentions(doc.content) : [{ type: "paragraph" }];
+  const tail = /[ \t]+$/.exec(markdown)?.[0];
+  const last = content.at(-1)!;
+  if (tail && last.type === "paragraph") content[content.length - 1] = { ...last, content: [...(last.content ?? []), { type: "text", text: tail }] };
+  return commentNode({ ...doc, content });
 }
 export function commentMarkdown(doc: PMNode): string {
-  const children: string[] = [];
-  doc.forEach((node) => {
-    if (node.type.name === "paragraph") children.push(inlineMarkdown(node));
-    else if (node.type.name === 'heading') children.push('#'.repeat(node.attrs.level)+' '+inlineMarkdown(node));
-    else if (node.type.name === "codeBlock")
-      children.push(
-        "```" + (node.attrs.language ?? "") + "\n" + node.textContent + "\n```",
-      );
-    else if (node.type.name === "blockquote")
-      children.push(
-        commentMarkdown(node)
-          .split("\n")
-          .map((line) => "> " + line)
-          .join("\n"),
-      );
-    else if (
-      node.type.name === "bulletList" ||
-      node.type.name === "orderedList"
-    ) {
-      const items: string[] = [];
-      node.forEach((item, _, index) =>
-        items.push(
-          (node.type.name === "orderedList" ? `${index + 1}. ` : "- ") +
-            commentMarkdown(item).replace(/\n/g, "\n  "),
-        ),
-      );
-      children.push(items.join("\n"));
-    }
-  });
-  return children.join("\n\n");
+  return serialize(commentNode(savedJson(doc.toJSON() as MarkdownNode)));
 }
+/** One textblock's inline nodes as Markdown (what copying an inline selection writes). */
+const inlineMarkdown = (content: PMNode["content"]) => commentMarkdown(commentSchema.node("doc", null, [commentSchema.node("paragraph", null, content)]));
+/** A typed construct's inline nodes, or null when the text holds no mark or mention. */
+function typedInline(text: string): PMNode[] | null {
+  const first = parse(text, { images: true }).content[0];
+  if (first?.type !== "paragraph" || !first.content) return null;
+  const nodes = withMentions(first.content).map(commentNode);
+  return nodes.some((node) => node.marks.length || node.type.name === "mention") ? nodes : null;
+}
+/** An upload is the reader's own; any other source needs a document to be fetched through, so it is never shown. */
+const noImageAddress = (src: string): string | Promise<string> =>
+  uploadAddress(src) ?? new Promise<string>(() => {});
 export interface MentionQuery {
   from: number;
   to: number;
@@ -185,6 +156,8 @@ export function mountCommentEditor(
     onChange: (value: string) => void;
     onKey: (event: KeyboardEvent) => boolean;
     onMention: (query: MentionQuery | null) => void;
+    /** The document the comment is on: its images are shown through it. Without one, an image shows its alt only. */
+    artifactId?: string;
   },
 ) {
   let value = props.value();
@@ -225,7 +198,7 @@ export function mountCommentEditor(
       editor.extensionManager.schema = commentSchema;
       editor.schema = commentSchema;
     },
-    extensions: commentExtensions(),
+    extensions: commentExtensions({ imageAddress: props.artifactId === undefined ? noImageAddress : commentImageAddress(props.artifactId) }),
     content: initialDoc.toJSON(),
     onTransaction: ({ transaction }) => {
       if (transaction.docChanged) publish();
@@ -264,7 +237,7 @@ export function mountCommentEditor(
     },
     clipboardTextSerializer: (slice) =>
       slice.content.firstChild?.isInline
-        ? inlineMarkdown(commentSchema.node("paragraph", null, slice.content))
+        ? inlineMarkdown(slice.content)
         : commentMarkdown(commentSchema.node("doc", null, slice.content)),
     handleTextInput(view, from, to, text) {
       if (view.composing || view.state.selection.$from.parent.type.spec.code)
@@ -273,26 +246,21 @@ export function mountCommentEditor(
         before =
           $from.parent.textBetween(0, $from.parentOffset, "\n", "\ufffc") +
           text;
+      // `_` opens only after a non-word character, as in Markdown, so snake_case stays text.
       const match =
-        /(\*\*[^*\n]+\*\*|_[^_\n]+_|(?<!\*)\*[^*\n]+\*|`[^`\n]+`|\[[^\]\n]+\]\([^\s)]+\))$/.exec(
+        /(\*\*[^*\n]+\*\*|(?<![\p{L}\p{N}_])_[^_\n]+_|(?<!\*)\*[^*\n]+\*|`[^`\n]+`|\[[^\]\n]+\]\([^\s)]+\))$/u.exec(
           before,
         );
-      if (match) {
-        const nodes = inlines(parseInline(match[0]));
-        if (
-          nodes.some(
-            (node) => node.marks.length || node.type.name === "mention",
-          )
-        ) {
-          const start = from + text.length - match[0].length;
-          view.dispatch(
-            view.state.tr
-              .insertText(text, from, to)
-              .replaceWith(start, from + text.length, nodes)
-              .setStoredMarks(null),
-          );
-          return true;
-        }
+      const nodes = match ? typedInline(match[0]) : null;
+      if (match && nodes) {
+        const start = from + text.length - match[0].length;
+        view.dispatch(
+          view.state.tr
+            .insertText(text, from, to)
+            .replaceWith(start, from + text.length, nodes)
+            .setStoredMarks(null),
+        );
+        return true;
       }
       if (text === ' ' && /^#{1,6} $/.test(before) && $from.parent.type.name === 'paragraph') {
         view.dispatch(view.state.tr.delete($from.start(),from).setBlockType($from.start(), $from.start(), commentSchema.nodes.heading, {level:before.trim().length}));
@@ -328,11 +296,11 @@ export function mountCommentEditor(
         marker === "list"
           ? wrapInList(commentSchema.nodes.bulletList)
           : marker === "link"
-            ? toggleMark(commentSchema.marks.link, { href: "https://" })
+            ? toggleMark(commentSchema.marks.link, { href: "https://", title: null })
             : toggleMark(
                 commentSchema.marks[
                   marker === "bold"
-                    ? "strong"
+                    ? "bold"
                     : marker === "italic"
                       ? "italic"
                       : "code"
@@ -342,9 +310,8 @@ export function mountCommentEditor(
       view.focus();
     },
     link(href: string) {
-      const safe = safeHref(href);
-      if (!safe) return false;
-      toggleMark(commentSchema.marks.link, { href: safe })(
+      if (!linkAllowed(href)) return false;
+      toggleMark(commentSchema.marks.link, { href, title: null })(
         view.state,
         view.dispatch,
       );
