@@ -106,7 +106,7 @@ it('answers every sql.mjs statement in the documented shape, through a page or a
  expect(capped.rows).toHaveLength(150);expect(capped.truncated).toBe(true);
  // A dataset write: {affected, returning} (returning is empty: the door answers counts only).
  expect(await run('DATA12','delete from rows where n < 2')).toEqual({affected:2,returning:[],version:10});
- await expect(run('DATA12','select 1',{limit:'10001'})).rejects.toMatchObject({code:'invalid_limit',exit:2});
+ await expect(run('DATA12','select 1',{limit:'10001'})).rejects.toMatchObject({code:'limit_too_large',exit:2});
 });
 it('uses private origin-bound login challenges and saves grants without exposing secrets',async()=>{
  const {authCommand}=await import('../../../skills/artifactbin/scripts/auth.mjs');
