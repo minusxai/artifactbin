@@ -4,9 +4,9 @@ import { initProseMirrorDoc, prosemirrorToYXmlFragment, updateYFragment } from '
 import type { Node as PMNode } from 'prosemirror-model';
 import { REGION_TEXT_MAX_UNITS } from '@artifactbin/contracts/region-sessions';
 import { Fragment } from 'prosemirror-model';
-import { nativeSchema, NATIVE_ROOT } from './native-schema';
+import { IMAGE_TITLE_MAX, nativeSchema, NATIVE_ROOT } from './native-schema';
 import { imageAllowed } from '../markdown/href';
-import { IMAGE_TITLE_MAX, readNativeHtml, writeNativeHtml, type NativeHtmlReadOptions, type NativeImage } from './native-html';
+import { readNativeHtml, writeNativeHtml, type NativeHtmlReadOptions } from './native-html';
 import { openRegionDoc, forkRegionDoc } from './region-doc';
 import { LiveRegionRefusal } from './refusal';
 import { isNodeId, safeHref } from './schema';
@@ -19,7 +19,7 @@ export function nativeDocument(doc:Y.Doc):PMNode {
   return [nativeSchema.nodes[child.nodeName]!.createChecked(child.getAttributes(),children(child))];
  });return nativeSchema.topNodeType.createChecked(null,children(nativeRoot(doc)));
 }
-/** `images`: as readNativeHtml's; a reader of stored content passes `true`, the legacy migration keeps refusing them. */
+/** `images`: as readNativeHtml's; every reader passes `true` but the legacy migration, which keeps refusing them. */
 export function createNativeState(html:string,options:NativeHtmlReadOptions={}){const doc=openRegionDoc(undefined,{kind:'rich-native-v1'});prosemirrorToYXmlFragment(readNativeHtml(html,options),nativeRoot(doc));validateNativeTree(doc);return {state:Y.encodeStateAsUpdate(doc),snapshot:Y.encodeSnapshot(Y.snapshot(doc))};}
 export function nativeHtml(state:Uint8Array){return writeNativeHtml(nativeDocument(openRegionDoc(state,{kind:'rich-native-v1'})));}
 export function validateNativeTree(doc:Y.Doc):void {
@@ -60,9 +60,6 @@ export function validateNativeTree(doc:Y.Doc):void {
  if(units>REGION_TEXT_MAX_UNITS)throw new LiveRegionRefusal('too_large');
  try{nativeDocument(doc).check();}catch{fail('native schema');}
 }
-const imageKey=(image:NativeImage)=>JSON.stringify([image.src,image.alt??'',image.title??null]);
-/** Whether a native document holds an image. */
-export const holdsImage=(doc:PMNode):boolean=>{let found=false;doc.descendants(node=>{if(node.type.name==='image')found=true;return !found;});return found;};
 export function reviseNative(liveBytes:Uint8Array,snapshotBytes:Uint8Array|undefined|null,html:string){
  if(!snapshotBytes?.length)throw new LiveRegionRefusal('missing_snapshot');
  const live=openRegionDoc(liveBytes,{kind:'rich-native-v1'});
@@ -71,9 +68,8 @@ export function reviseNative(liveBytes:Uint8Array,snapshotBytes:Uint8Array|undef
  if(!snapshot.sv.size||[...snapshot.sv].some(([client,clock])=>(known.get(client)??0)<clock))throw new LiveRegionRefusal('snapshot_mismatch');
  const fork=forkRegionDoc(live,snapshot);
  const root=nativeRoot(fork);const {mapping}=initProseMirrorDoc(root,nativeSchema);
- // A revision keeps the images its base holds and creates none (native-schema.ts: no writer yet).
- const kept=new Set<string>();nativeDocument(fork).descendants(node=>{if(node.type.name==='image')kept.add(imageKey(node.attrs as NativeImage));});
- const parsed=readNativeHtml(html,{images:kept.size?image=>kept.has(imageKey(image)):false});
+ // A revision reads every image the document may hold (native-html.ts), as a stored page is read.
+ const parsed=readNativeHtml(html,{images:true});
  // Match unchanged siblings before positional edits; insertion must never steal a following block's identity.
  const signature=(node:PMNode):string=>JSON.stringify(node.toJSON(),(key,value)=>key==='afId'?undefined:value);
  const carry=(target:PMNode,base:PMNode|undefined):PMNode=>{

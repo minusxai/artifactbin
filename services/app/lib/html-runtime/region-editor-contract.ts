@@ -12,6 +12,8 @@ export interface RegionEditorOptions {
   root: HTMLElement;
   regionId: string;
   kind: RegionKind;
+  /** The page's id: an external image the served page gave no address shows through its first-view door. */
+  pageId?: string;
   /** The server-assigned Yjs client id this session writes with. */
   clientId: number;
   /** The server's full merged state. */

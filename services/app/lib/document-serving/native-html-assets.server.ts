@@ -3,14 +3,17 @@ import {htmlAssetLinks,rewriteHtmlAssetUrls} from '@/lib/html-page';
 import {getArtifactHeadersByIds,type ArtifactRow} from '@/lib/artifacts';
 import {lookupWebAssets} from '@/lib/publish';
 import {editableRegions} from '@/lib/live-regions';
-/** The external images a document's text (its rich-native-v1 regions) names; read only when the page has such a region. */
+/** The external images and uploads (`ref:<id>`) a document's text (its rich-native-v1 regions) names; read only when the
+ * page has such a region. */
 const documentImages=(source:string):string[]=>source.includes('rich-native-v1')
- ?editableRegions(source).filter(region=>region.kind==='rich-native-v1').flatMap(region=>htmlAssetLinks(region.inner).imageUrls.filter(url=>url.startsWith('https://'))):[];
+ ?editableRegions(source).filter(region=>region.kind==='rich-native-v1').flatMap(region=>{const links=htmlAssetLinks(region.inner);return [...links.imageUrls.filter(url=>url.startsWith('https://')),...links.refs.map(id=>'ref:'+id)];}):[];
 /** Published references carry admission only; each eventual byte request still enforces its current read ACL.
  * `captureKey`: an export capture's verified key, carried on the page's own-door addresses (./native-html.server).
  * An external image in a document's text that no cached copy serves yet goes through the page's first-view door
  * (`/a/<id>/assets?u=`, app/a/[id]/assets: the reader's access, the network guard, image bytes only, the page's hourly
- * allowance), so the reader's browser never fetches what an agent wrote there from its own host. */
+ * allowance), so the reader's browser never fetches what an agent wrote there from its own host. So does an upload the
+ * text names that publish did not admit (one a person or an agent wrote into the live text since): the door resolves it
+ * with the reader's own access (app/a/[id]/assets, lib/artifact-wire resolveImageReference), never the publisher's. */
 export async function nativeHtmlAssets(row:Pick<ArtifactRow,'id'|'version'|'source'|'meta'>,captureKey:string|null=null):Promise<string>{
  const source=row.source??'',assets=htmlAssetLinks(source),urls=new Map<string,string>();
  const admitted=(row.meta as {refs?:Array<{id:string}>}).refs??[];
@@ -21,6 +24,6 @@ export async function nativeHtmlAssets(row:Pick<ArtifactRow,'id'|'version'|'sour
  ]);
  for(const asset of headers)if(['image','file','pdf'].includes(asset.format))urls.set('ref:'+asset.id,`/a/${asset.id}/raw?v=${asset.version}`);
  for(const [url,asset] of images)urls.set(url,`/assets/${asset.url_hash}`);
- if(assets.imageUrls.some(url=>url.startsWith('https://')&&!images.has(url)))for(const url of documentImages(source))if(!urls.has(url))urls.set(url,`/a/${row.id}/assets?u=${encodeURIComponent(url)}${captureKey?`&key=${encodeURIComponent(captureKey)}`:''}`);
+ if(assets.imageUrls.some(url=>url.startsWith('https://')&&!images.has(url))||assets.refs.some(id=>!urls.has('ref:'+id)))for(const url of documentImages(source))if(!urls.has(url))urls.set(url,`/a/${row.id}/assets?u=${encodeURIComponent(url)}${captureKey?`&key=${encodeURIComponent(captureKey)}`:''}`);
  return pinPublicationAssetUrls(rewriteHtmlAssetUrls(source,urls),row.id,row.version,'text/html',[],captureKey);
 }

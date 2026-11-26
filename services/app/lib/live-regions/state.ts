@@ -4,9 +4,9 @@
  * kept. Everything here is a pure function of bytes: states, updates and snapshots go in and come out as `Uint8Array`.
  */
 import * as Y from 'yjs';
-import { createNativeState, holdsImage, nativeHtml, nativeDocument, reviseNative } from './native-state';
+import { createNativeState, nativeHtml, nativeDocument, reviseNative } from './native-state';
 import { nativeMarkdownJson } from './native-markdown';
-import { writeNativeMarkdown } from './native-markdown-save';
+import { keepImageSpelling, writeNativeMarkdown } from './native-markdown-save';
 import { nativeSchema } from './native-schema';
 import { readNativeHtml, writeNativeHtml } from './native-html';
 import type { Node as PMNode } from 'prosemirror-model';
@@ -23,7 +23,7 @@ export const readDocument = (kind: RegionKind, doc: Y.Doc): PMNode => kind === '
 
 /** A region's normal form: what publish stores for it. Refuses content the kind cannot hold. */
 export function normalizeRegionHtml(kind: RegionKind, html: string): string {
-  if (kind === 'rich-native-v1') return writeNativeHtml(readNativeHtml(html));
+  if (kind === 'rich-native-v1') return writeNativeHtml(readNativeHtml(html, { images: true }));
   return writeRegion(kind, readRegion(kind, htmlSource(html), 'refuse'));
 }
 
@@ -234,14 +234,11 @@ export function applyRegionRevision(input: RegionRevisionInput): RegionRevision 
   const { kind } = input;
   if ((input.html === undefined) === (input.markdown === undefined)) throw new TypeError('applyRegionRevision takes exactly one of html or markdown');
   if (kind === 'rich-native-v1') {
-    // Refuse a representation that cannot carry the existing ARIA attributes, or an existing image (Markdown writes
-    // turn image syntax into text: they create no image, so sending one back would replace it with its source).
-    if (input.markdown !== undefined) {
-      const live = nativeDocument(openRegionDoc(input.live,{kind}));
-      writeNativeMarkdown(live);
-      if (holdsImage(live)) throw new LiveRegionRefusal('unsupported_content',['image requires HTML']);
-    }
-    return reviseNative(input.live, input.savedSnapshot, input.html ?? writeNativeHtml(nativeSchema.nodeFromJSON(nativeMarkdownJson(input.markdown!))));
+    if (input.html !== undefined) return reviseNative(input.live, input.savedSnapshot, input.html);
+    // Refuse a representation that cannot carry the existing ARIA attributes (a legacy checkbox). Images are Markdown.
+    const live = nativeDocument(openRegionDoc(input.live,{kind}));
+    writeNativeMarkdown(live);
+    return reviseNative(input.live, input.savedSnapshot, writeNativeHtml(nativeSchema.nodeFromJSON(keepImageSpelling(nativeMarkdownJson(input.markdown!), live))));
   }
   const revision = readRegion(kind, input.html !== undefined ? htmlSource(input.html) : markdownSource(input.markdown!, kind), 'refuse');
   if (!input.savedSnapshot?.length) throw new LiveRegionRefusal('missing_snapshot');

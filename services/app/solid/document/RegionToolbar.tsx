@@ -10,6 +10,9 @@
  *  - the LINK dialog (the toolbar's Link, or Mod-K in the editor): a URL is refused here unless it is one a region may
  *    hold (lib/live-regions/href, the editor's and the server's own rule), then applied to the selection, the link at
  *    the caret, or inserted as linked text.
+ *  - the IMAGE dialog (the toolbar's Image, or the slash menu's): an image address and its alt text, refused here unless
+ *    it is one a document may hold (lib/markdown imageAllowed: https, a path on this site or an upload `ref:<id>`; an
+ *    address typed without a scheme, `host.example/x.png`, is read as https), then inserted at the caret. No uploads.
  *  - the SLASH MENU, opened by `/` at an empty block's start, at the caret: the focus moves to its filter, typing
  *    narrows it, arrows and Enter choose, Escape closes it and leaves the `/` where it is; choosing removes the `/`
  *    and runs the item's command.
@@ -21,6 +24,7 @@ import Bold from 'lucide-solid/icons/bold';
 import Italic from 'lucide-solid/icons/italic';
 import Code from 'lucide-solid/icons/code';
 import Link from 'lucide-solid/icons/link';
+import ImageIcon from 'lucide-solid/icons/image';
 import List from 'lucide-solid/icons/list';
 import ListOrdered from 'lucide-solid/icons/list-ordered';
 import Quote from 'lucide-solid/icons/quote';
@@ -30,6 +34,7 @@ import Redo2 from 'lucide-solid/icons/redo-2';
 import IndentIncrease from 'lucide-solid/icons/indent-increase';
 import IndentDecrease from 'lucide-solid/icons/indent-decrease';
 import { safeHref } from '@/lib/live-regions/href';
+import { imageAllowed } from '@/lib/markdown/href';
 import { REGION_TOOLBAR_H } from '@/lib/html-reader/edit-bar';
 import { Button } from '../ui/Button';
 import { ComboboxList, createListNavigation } from '../ui/Combobox';
@@ -112,7 +117,57 @@ function LinkControl(props: { ui: RegionUi; state: Accessor<RegionToolbarState> 
   </Popover>;
 }
 
-export function RegionToolbar(props: { ui: RegionUi; state: Accessor<RegionToolbarState> }): JSX.Element {
+/** An image address as typed: trimmed, and a bare host path (`host.example/x.png`, `www.…`) read as https. */
+function imageSource(typed: string): string | null {
+  const value = typed.trim();
+  const src = /^(?:www\.|[a-z0-9-]+(?:\.[a-z0-9-]+)+\/)/i.test(value) ? `https://${value}` : value;
+  return src && imageAllowed(src) ? src : null;
+}
+
+function ImageControl(props: { ui: RegionUi; asked?: Accessor<number> }): JSX.Element {
+  const [open, setOpen] = createSignal(false);
+  const [src, setSrc] = createSignal('');
+  const [alt, setAlt] = createSignal('');
+  const [error, setError] = createSignal<string | null>(null);
+  /** Opened from the slash menu: its `/` goes only once the dialog closes (no editor command, which takes the focus back
+   * to the frame, runs while the dialog takes it), and closing without an image goes back to the text. */
+  let fromEditor = false;
+  const show = (editor: boolean) => { fromEditor = editor; setSrc(''); setAlt(''); setError(null); setOpen(true); };
+  const leaveSlash = () => { if (fromEditor) props.ui.command('removeSlash'); };
+  createEffect(on(() => props.asked?.() ?? 0, (asked) => { if (asked) show(true); }, { defer: true }));
+  const close = (done: boolean) => {
+    if (!open()) return;
+    setOpen(false);
+    if (!done) { leaveSlash(); if (fromEditor) props.ui.command('resume'); }
+  };
+  const apply = () => {
+    const source = imageSource(src());
+    if (!source) { setError('Use an https image address or an upload (ref:…).'); return; }
+    leaveSlash();
+    props.ui.command('image', { src: source, alt: alt().trim() });
+    close(true);
+  };
+  return <Popover open={open()} onOpenChange={(next) => (next ? show(false) : close(false))} label="Image"
+    trigger={(attrs) => <Tooltip content="Image">
+      <Button ref={attrs.ref} aria-haspopup={attrs['aria-haspopup']} aria-expanded={attrs['aria-expanded']} variant="ghost" size="sm" icon aria-label="Image"
+        onClick={() => (open() ? close(false) : show(false))}><ImageIcon size={16} /></Button>
+    </Tooltip>}>
+    <form class="grid w-72 gap-3 p-3" onSubmit={(event) => { event.preventDefault(); apply(); }}>
+      <Field label="Image URL" error={error()}>
+        <Input size="sm" ref={focusSoon} value={src()} placeholder="https://" autocomplete="off" spellcheck={false}
+          onInput={(event) => { setSrc(event.currentTarget.value); setError(null); }} />
+      </Field>
+      <Field label="Alt text">
+        <Input size="sm" value={alt()} placeholder="What the image shows" autocomplete="off" onInput={(event) => setAlt(event.currentTarget.value)} />
+      </Field>
+      <div class="flex justify-end gap-2">
+        <Button type="submit" size="sm">Insert image</Button>
+      </div>
+    </form>
+  </Popover>;
+}
+
+export function RegionToolbar(props: { ui: RegionUi; state: Accessor<RegionToolbarState>; image?: Accessor<number> }): JSX.Element {
   const state = props.state;
   const run = (name: string, args?: Record<string, unknown>) => props.ui.command(name, args);
   const block = () => state().block;
@@ -138,6 +193,7 @@ export function RegionToolbar(props: { ui: RegionUi; state: Accessor<RegionToolb
       <Command label="Italic" keys="Mod-i" pressed={mark('em')} onPress={() => run('em')}><Italic size={16} /></Command>
       <Command label="Inline code" keys="Mod-Shift-e" pressed={mark('code')} onPress={() => run('code')}><Code size={16} /></Command>
       <LinkControl ui={props.ui} state={state} />
+      <ImageControl ui={props.ui} asked={props.image} />
       <ToolbarSeparator />
       <Command label="Bulleted list" keys="Mod-Shift-8" pressed={block() === 'bullet'} onPress={() => run('list', { type: block() === 'bullet' ? null : 'bullet' })}><List size={16} /></Command>
       <Command label="Numbered list" keys="Mod-Shift-7" pressed={block() === 'ordered'} onPress={() => run('list', { type: block() === 'ordered' ? null : 'ordered' })}><ListOrdered size={16} /></Command>
@@ -161,6 +217,8 @@ export const SLASH_ITEMS: ReadonlyArray<{ id: string; label: string; words: stri
   { id: 'quote', label: 'Quote', words: 'quote blockquote citation', command: ['quote', { on: true }] },
   { id: 'code', label: 'Code block', words: 'code block pre snippet', command: ['codeBlock', { on: true }] },
   { id: 'rule', label: 'Divider', words: 'divider rule line separator hr', command: ['rule'] },
+  // Opens the image dialog (RegionEditingChrome), which sends the `image` command with the address it is given.
+  { id: 'image', label: 'Image', words: 'image picture photo img url', command: ['image'] },
 ];
 /** The items whose label or words hold every word typed, labels starting with the query first. */
 export function slashMatches(query: string): typeof SLASH_ITEMS[number][] {
@@ -172,7 +230,7 @@ export function slashMatches(query: string): typeof SLASH_ITEMS[number][] {
 
 const SLASH_WIDTH = 240;
 
-export function SlashMenu(props: { ui: RegionUi; at: Accessor<{ left: number; top: number }> }): JSX.Element {
+export function SlashMenu(props: { ui: RegionUi; at: Accessor<{ left: number; top: number }>; onImage?: () => void }): JSX.Element {
   const list = createUniqueId();
   const [query, setQuery] = createSignal('');
   const items = createMemo(() => slashMatches(query()));
@@ -199,6 +257,8 @@ export function SlashMenu(props: { ui: RegionUi; at: Accessor<{ left: number; to
     if (done) return;
     done = true;
     props.ui.closeSlash();
+    // The image dialog removes the `/` itself once it closes.
+    if (item.id === 'image' && props.onImage) { props.onImage(); return; }
     props.ui.command('removeSlash');
     props.ui.command(item.command[0], item.command[1]);
   };
@@ -227,12 +287,14 @@ export function SlashMenu(props: { ui: RegionUi; at: Accessor<{ left: number; to
 
 /** The toolbar under the app bar (and clear of an open comments rail), and the slash menu, while they apply. */
 export function RegionEditingChrome(props: { ui: RegionUi; top: number; right: number }): JSX.Element {
+  // The slash menu's Image asks the toolbar's image dialog to open (a count, so each choice opens it again).
+  const [image, askImage] = createSignal(0);
   return <>
     <Show when={props.ui.toolbar()}>{(state) => (
       <div class="pointer-events-none fixed left-0 flex items-center justify-center px-2" style={{ top: `${props.top}px`, right: `${props.right}px`, height: `${REGION_TOOLBAR_H}px` }}>
-        <RegionToolbar ui={props.ui} state={state} />
+        <RegionToolbar ui={props.ui} state={state} image={image} />
       </div>
     )}</Show>
-    <Show when={props.ui.slash()}>{(at) => <SlashMenu ui={props.ui} at={at} />}</Show>
+    <Show when={props.ui.slash()}>{(at) => <SlashMenu ui={props.ui} at={at} onImage={() => askImage((count) => count + 1)} />}</Show>
   </>;
 }

@@ -12,6 +12,7 @@ import * as Y from 'yjs';
 import { nativeExtensions, NATIVE_ROOT, openRegionDoc } from '../live-regions/native-browser';
 import { createRegionCaretPainter } from './bridge/region-carets';
 import { safeHref } from '../live-regions/href';
+import { imageAllowed } from '../markdown/href';
 import { REGION_EDITOR_ATTR, type RegionEditor, type RegionEditorOptions } from './region-editor-contract';
 
 /** Delay before posting local Yjs updates from the frame to its parent. */
@@ -58,7 +59,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
   Y.applyUpdate(doc,Y.mergeUpdates([...updates]),REMOTE);doc.clientID=clientId;
   if(kept)select(kept);
  };
- editor=new Editor({element:root,extensions:[...nativeExtensions({servedImages}),NativeIdentityRepair,NativeIndentation,NativeEditorShortcuts,NativeCodePresentation,Collaboration.configure({document:doc,field:NATIVE_ROOT})],
+ editor=new Editor({element:root,extensions:[...nativeExtensions({servedImages,...(options.pageId?{pageId:options.pageId}:{})}),NativeIdentityRepair,NativeIndentation,NativeEditorShortcuts,NativeCodePresentation,Collaboration.configure({document:doc,field:NATIVE_ROOT})],
   editorProps:{transformPasted:freshClipboard,transformPastedHTML:html=>normalizeChecklist(html,root.ownerDocument),
    handleTextInput(view,from,to,text){const at=view.state.doc.resolve(from);if(text==='/'&&from===to&&at.parent.isTextblock&&!at.parent.type.spec.code&&!at.parent.content.size){const box=view.coordsAtPos(from);post({kind:'region-slash',regionId,x:box.left,y:box.bottom});}return false;},
    handleKeyDown(view,event){
@@ -116,6 +117,12 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
      if(around){const tr=view.state.tr.removeMark(around.from,around.to,mark);if(href)tr.addMark(around.from,around.to,mark.create({href}));view.dispatch(tr.removeStoredMark(mark));done=true;}
      else if(href){view.dispatch(view.state.tr.insertText(href,from).addMark(from,from+href.length,mark.create({href})).removeStoredMark(mark));done=true;}
     }
+   }
+   else if(name==='image'){
+    // By address only (the page's image dialog): a source a document may hold, in a textblock that is not code.
+    const src=typeof args.src==='string'?args.src.trim():'',alt=typeof args.alt==='string'?args.alt.replace(/\s+/g,' ').trim():'';
+    const image=view.state.schema.nodes.image!,{$from}=view.state.selection;
+    if(src&&imageAllowed(src)&&$from.parent.isTextblock&&!$from.parent.type.spec.code){view.dispatch(view.state.tr.replaceSelectionWith(image.create({src,alt,title:null}),false).scrollIntoView());done=true;}
    }
    else if(name==='resume'||name==='focus'){if(name==='focus')view.dispatch(view.state.tr.setSelection(Selection.atStart(view.state.doc)));view.focus();done=true;}
    if(name!=='undo'&&name!=='redo')undo?.stopCapturing();

@@ -228,7 +228,7 @@ export function startFrameRegions({ win, post, load, pageId }: FrameRegionsOptio
     release(id);
     const carried = kept?.regionId === id ? { anchor: kept.anchor, head: kept.head } : undefined;
     if (carried) kept = null;
-    session.editor = editors.mountRegionEditor({ win, root: session.root, regionId: id, kind: start.regionKind, clientId: start.clientId, state: start.state, post, at: asked.has(id) ? asked.get(id) ?? null : undefined, ...(focus ? {} : { focus: false as const }), ...(carried && focus ? { caret: carried } : {}) });
+    session.editor = editors.mountRegionEditor({ win, root: session.root, regionId: id, kind: start.regionKind, ...(pageId ? { pageId } : {}), clientId: start.clientId, state: start.state, post, at: asked.has(id) ? asked.get(id) ?? null : undefined, ...(focus ? {} : { focus: false as const }), ...(carried && focus ? { caret: carried } : {}) });
     asked.delete(id);
     session.editor.paint(carets);
     for (const message of session.queue.splice(0)) deliver(session.editor, message);

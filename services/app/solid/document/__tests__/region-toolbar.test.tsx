@@ -2,7 +2,8 @@
 /**
  * THE EDITING CHROME OF A LIVE REGION (solid/document/RegionToolbar), against the region UI a framed story hands it
  * (create-framed-story `regionUi`): the toolbar follows the caret the frame's editor reports and sends its commands; the
- * link dialog refuses unsafe URLs; the slash menu filters, takes the keyboard and runs (or leaves) the `/`.
+ * link dialog refuses unsafe URLs; the image dialog inserts an image by an address a document may hold; the slash menu
+ * filters, takes the keyboard and runs (or leaves) the `/`.
  */
 import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -49,7 +50,7 @@ describe('the region toolbar', () => {
     const page = chrome();
     expect(screen.queryByRole('toolbar')).toBeNull();
     page.state([], 'paragraph');
-    for (const name of ['Undo', 'Redo', 'Bold', 'Italic', 'Inline code', 'Link', 'Bulleted list', 'Numbered list', 'Quote', 'Code block', 'Decrease indent', 'Increase indent'])
+    for (const name of ['Undo', 'Redo', 'Bold', 'Italic', 'Inline code', 'Link', 'Image', 'Bulleted list', 'Numbered list', 'Quote', 'Code block', 'Decrease indent', 'Increase indent'])
       expect(button(name)).toBeVisible();
     expect(within(bar()).getByRole('button', { name: 'Text style' })).toHaveTextContent('Normal text');
     page.setToolbar(null);
@@ -176,9 +177,71 @@ describe('the link dialog', () => {
   });
 });
 
+describe('the image dialog', () => {
+  const open = async () => {
+    fireEvent.click(button('Image'));
+    const field = await screen.findByRole('textbox', { name: 'Image URL' });
+    await waitFor(() => expect(field).toHaveFocus());
+    return { field, alt: screen.getByRole('textbox', { name: 'Alt text' }) };
+  };
+
+  it('refuses an address a document may not hold, and inserts an https image or an upload with its alt text', async () => {
+    const page = chrome();
+    page.state([], 'paragraph');
+    const { field, alt } = await open();
+    for (const unsafe of ['javascript:alert(1)', 'data:image/png;base64,AA', 'http://i.example/p.png', '//host.example/p.png', '   ']) {
+      fireEvent.input(field, { target: { value: unsafe } });
+      fireEvent.click(screen.getByRole('button', { name: 'Insert image' }));
+      expect(screen.getByText('Use an https image address or an upload (ref:…).')).toBeVisible();
+    }
+    expect(page.commands).toEqual([]);
+    fireEvent.input(field, { target: { value: ' https://i.example/c.png ' } });
+    fireEvent.input(alt, { target: { value: ' Sales by month ' } });
+    fireEvent.submit(field.closest('form')!);
+    expect(page.commands).toEqual([['image', { src: 'https://i.example/c.png', alt: 'Sales by month' }]]);
+    expect(screen.queryByRole('textbox', { name: 'Image URL' })).toBeNull();
+    const again = await open();
+    expect(again.field).toHaveValue('');
+    fireEvent.input(again.field, { target: { value: 'ref:abcdef12' } });
+    fireEvent.submit(again.field.closest('form')!);
+    expect(page.commands.at(-1)).toEqual(['image', { src: 'ref:abcdef12', alt: '' }]);
+  });
+
+  it('an address typed without a scheme is read as https, as a browser reads it', async () => {
+    const page = chrome();
+    page.state([], 'paragraph');
+    const { field } = await open();
+    fireEvent.input(field, { target: { value: 'i.example/c.png' } });
+    fireEvent.submit(field.closest('form')!);
+    expect(page.commands).toEqual([['image', { src: 'https://i.example/c.png', alt: '' }]]);
+  });
+
+  it('the slash menu\'s Image opens the dialog, which removes the `/` as it closes; closing it unused returns to the text', async () => {
+    const page = chrome();
+    page.state([], 'paragraph');
+    page.setSlash({ regionId: 'notes', left: 10, top: 10 });
+    fireEvent.click(await screen.findByRole('option', { name: 'Image' }));
+    // No editor command (which takes the focus back to the frame) while the dialog takes it.
+    expect(page.commands).toEqual([]);
+    expect(screen.queryByRole('dialog', { name: 'Insert block' })).toBeNull();
+    const field = await screen.findByRole('textbox', { name: 'Image URL' });
+    await waitFor(() => expect(field).toHaveFocus());
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Image URL' })).toBeNull());
+    expect(page.commands).toEqual([['removeSlash'], ['resume']]);
+    page.setSlash({ regionId: 'notes', left: 10, top: 10 });
+    fireEvent.click(await screen.findByRole('option', { name: 'Image' }));
+    const next = await screen.findByRole('textbox', { name: 'Image URL' });
+    fireEvent.input(next, { target: { value: 'https://i.example/c.png' } });
+    fireEvent.submit(next.closest('form')!);
+    expect(page.commands.slice(2)).toEqual([['removeSlash'], ['image', { src: 'https://i.example/c.png', alt: '' }]]);
+  });
+});
+
 describe('the slash menu', () => {
   it('finds blocks by any of their words', () => {
-    expect(slashMatches('').map((item) => item.label)).toEqual(['Text', 'Heading 1', 'Heading 2', 'Heading 3', 'Bulleted list', 'Numbered list', 'Quote', 'Code block', 'Divider']);
+    expect(slashMatches('').map((item) => item.label)).toEqual(['Text', 'Heading 1', 'Heading 2', 'Heading 3', 'Bulleted list', 'Numbered list', 'Quote', 'Code block', 'Divider', 'Image']);
+    expect(slashMatches('picture').map((item) => item.label)).toEqual(['Image']);
     expect(slashMatches('head').map((item) => item.label)).toEqual(['Heading 1', 'Heading 2', 'Heading 3']);
     expect(slashMatches('list').map((item) => item.label)).toEqual(['Bulleted list', 'Numbered list']);
     expect(slashMatches('ol').map((item) => item.label)).toEqual(['Numbered list']);
@@ -194,7 +257,7 @@ describe('the slash menu', () => {
     expect(menu.style.top).toBe('304px');
     const filter = within(menu).getByRole('combobox', { name: 'Filter blocks' });
     await waitFor(() => expect(filter).toHaveFocus());
-    expect(within(menu).getAllByRole('option')).toHaveLength(9);
+    expect(within(menu).getAllByRole('option')).toHaveLength(10);
     fireEvent.input(filter, { target: { value: 'head' } });
     expect(within(menu).getAllByRole('option').map((option) => option.textContent)).toEqual(['Heading 1', 'Heading 2', 'Heading 3']);
     expect(within(menu).getByRole('option', { name: 'Heading 1' })).toHaveAttribute('aria-selected', 'true');
