@@ -175,7 +175,7 @@ const BUNDLED_LEAVES = {
     'shared-request', 'urls',
   ],
   'lib/local-connection': ['browser'],
-  'lib/markdown': ['content', 'code-block', 'display', 'editor'],
+  'lib/markdown': ['code-block', 'display', 'editor'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/html-systems': ['story-systems', 'story-themes', ],
   'lib/workspace': ['artifact-starters', 'breadcrumb', 'visibility-icons'],
@@ -240,9 +240,10 @@ export const DEEP_MODULES = {
   'lib/object-store': { entries: [''] },
   // server.ts imports these two statically, before it reads configuration; the index loads lib/platform.
   'lib/runtime': { entries: ['', 'dev-vite', 'request-log'] },
-  // The shared Markdown module's display (parse, renderHtml) and editor (Tiptap elements, serialize) entries, ahead
-  // of the surfaces (af-markdown, comments, the Markdown field, documents) that move onto them one change at a time.
-  'lib/markdown': { ...bundled('lib/markdown'), awaitingImporters: ['display', 'editor'] },
+  // The shared Markdown module's display (parse, renderHtml; af-markdown renders through it) and editor (Tiptap
+  // elements, serialize) entries; the editor waits for the surfaces (comments, the Markdown field, documents) that
+  // move onto it one change at a time.
+  'lib/markdown': { ...bundled('lib/markdown'), awaitingImporters: ['editor'] },
 };
 /**
  * Rule 6: the Markdown parser and serializer packages belong to lib/markdown, the one place Markdown is read and

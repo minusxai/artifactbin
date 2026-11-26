@@ -85,3 +85,20 @@ it('carries native checklist presentation before an editor mounts',()=>{
  expect(MARKDOWN_CSS).toContain('li[data-checked="true"]');
  expect(MARKDOWN_CSS).toContain('li[data-checked]>label');
 });
+
+it('spaces the shared markup as af-markdown always has: tight list items flush, images inside the column',()=>{
+ // jsdom does not cascade margin-block, so the rule is matched by selector: a later zero-specificity rule wins.
+ const flush=[...MARKDOWN_CSS.matchAll(/([^{}\n]+)\{margin-block:0\}/g)].map(match=>({selector:match[1]!.trim(),at:match.index}));
+ const spaced=MARKDOWN_CSS.indexOf(':where(li>p,li>div>p,p[data-list]){margin-block:0 .3em}');
+ expect(spaced).toBeGreaterThan(0);
+ const flushed=(p:Element)=>flush.some(rule=>rule.at>spaced&&p.matches(rule.selector));
+ const el=document.createElement('af-markdown');el.textContent='- one\n- two\n\n1. first\n2. second\n\n- [x] done\n- [ ] open\n\n![wide](https://img.example/w.png)';document.body.append(el);
+ const items=[...el.querySelectorAll('li>p')];
+ expect(items).toHaveLength(6);
+ expect(items.filter(p=>!flushed(p)).map(p=>p.textContent)).toEqual([]);
+ const loose=document.createElement('af-markdown');loose.textContent='- one\n\n- two';document.body.append(loose);
+ expect(loose.querySelector('ul')!.hasAttribute('data-tight')).toBe(false);
+ expect([...loose.querySelectorAll('li>p')].filter(flushed)).toEqual([]);
+ const image=getComputedStyle(el.querySelector('img')!);
+ expect(image.maxWidth).toBe('100%');
+});

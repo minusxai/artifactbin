@@ -1,10 +1,13 @@
 /**
- * <af-markdown>: renders GitHub-flavoured Markdown with code highlighting and copy buttons;
- *   unsafe or unsupported content is rejected.
+ * <af-markdown>: renders GitHub-flavoured Markdown with code highlighting, copy buttons and
+ *   images; raw HTML and a refused link or image show as typed (refusals: one console.warn).
  * Usage: import '@afbin/markdown';  (registers the tags; this .ts is the readable contract)
- * Props: source (property wins over the source attribute, then the initial text).
+ * Props: source (property wins over the source attribute, then the initial text);
+ *   copy-controls="false" drops the copy buttons. Emits no events.
  * Examples:
  *   <af-markdown>## Notes\n- one\n- two</af-markdown>
+ * Rules: a newline is a line break; links: http(s), mailto, tel, relative (bare: a scheme or
+ *   www.); images: https, relative. Headings 1-3 get id `<id or scope>-heading-<n>`.
  * Styles: Markdown and docs share one stylesheet (markdown-styles.ts); the design system sets
  *   fonts and colours; for one page add a small <style> override such as
  *   `article { line-height: 1.4 }`.
@@ -16,7 +19,7 @@ import { registerComponent } from './register-component';
  * its layout.
  * Property source takes precedence over the source attribute, then initial literal text. */
 export interface MarkdownContract { source: string; copyControls: boolean }
-import { markdownContent } from '../markdown/content';
+import { parse, renderHtml, type Refusal } from '../markdown/display';
 import { MARKDOWN_CSS, MARKDOWN_ROOT } from './markdown-styles';
 let nextHeadingScope = 0;
 /** Only generated output is replaced; the host remains the authored identity. */
@@ -45,11 +48,11 @@ if(!this.output) { this.literalSource=[...this.childNodes].filter(node=>node.nod
  attributeChangedCallback(): void { this.render(); }
  private render(): void {
   if(!this.output) return;
-  const rendered=markdownContent(this.source);
-if(rendered.errors.length) { const alert=this.ownerDocument.createElement('p'); alert.setAttribute(
-    'role','alert'); alert.textContent=rendered.errors.join(' '); this.output.replaceChildren(
-    alert); return; }
-  this.output.innerHTML=rendered.html;
+  const refused: Refusal[]=[];
+  this.output.innerHTML=renderHtml(parse(this.source,{images:true,onRefused:refusal=>{
+    refused.push(refusal);}}));
+  if(refused.length) console.warn(`af-markdown shows as typed: ${refused.map(refusal=>
+    refusal.source).join(', ')}`);
 this.output.querySelectorAll<HTMLElement>('[data-mx-markdown-heading]').forEach(heading=>{
     heading.id=`${this.id || this.scope}-heading-${heading.dataset.mxMarkdownHeading}`;});
 if(this.copyControls)this.output.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector(

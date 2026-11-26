@@ -2,7 +2,7 @@
  * THE ONE HTML WRITER: the module's document → the shared markup, which the editor entry's extensions emit too
  * (their on-screen DOM equals this, apart from the attributes and nodes editor-contract.ts lists).
  *
- * The markup, from today's af-markdown (./content.ts):
+ * The markup, af-markdown's:
  * - p; h1-h6, h1-h3 with `data-mx-markdown-heading="<n>"` numbered in document order (af-markdown turns it into an
  *   anchor id); strong, em, s, code, `a href [title]` (no target or rel; `data-mx-link` when the caller classifies
  *   it); br; blockquote; hr; code blocks through ./code-block.ts's renderCodeBlock (today's highlighting).

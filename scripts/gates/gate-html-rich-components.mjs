@@ -27,7 +27,7 @@ try{
   check(await page.locator('#markdown h1').textContent()==='Field notes',`${tag} Markdown headings`);
   check(await page.locator('#markdown .mx-code-token-keyword').count()>0&&await page.locator('#markdown table').count()===1,`${tag} Markdown GFM table and code highlighting`);
   const heading=await page.locator('#markdown h1').getAttribute('id');
-  await page.evaluate(()=>{const node=document.querySelector('#markdown');node.source='[bad](javascript:alert(1))';});check(await page.locator('#markdown [role=alert]').count()===1,`${tag} Markdown rejects unsafe links`);
+  await page.evaluate(()=>{const node=document.querySelector('#markdown');node.source='[bad](javascript:alert(1))';});check(await page.locator('#markdown a').count()===0&&await page.locator('#markdown [role=alert]').count()===0&&await page.locator('#markdown p').textContent()==='[bad](javascript:alert(1))',`${tag} Markdown shows an unsafe link as typed`);
   await page.evaluate(()=>{document.querySelector('#markdown').source=window.richFixture.markdownSource;});check(await page.locator('#markdown h1').getAttribute('id')===heading,`${tag} Markdown recovers with stable heading identity`);
   for(const [clipboard, expectedStatus] of [['real', 'Copied'], ['rejected', 'Copy unavailable']]){
    if(clipboard==='real')await page.context().grantPermissions(['clipboard-read','clipboard-write'],{origin});

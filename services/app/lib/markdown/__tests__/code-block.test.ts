@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { escapeHtml } from '@artifactbin/utils/escape';
 import { MAX_HIGHLIGHT_CODE_LENGTH, renderCodeBlock } from '../code-block';
-import { markdownContent } from '../content';
+import { parse, plainText, renderHtml } from '../display';
 
 const cases = [
   ['html', '<section class="note"><script>const x = 42;</script></section>', 'html'],
@@ -21,10 +21,9 @@ describe('language-tagged code rendering', () => {
     const rendered = renderCodeBlock(source, language);
     expect(rendered).toContain(`data-language="${canonical}"`);
     expect(rendered).toContain('mx-code-token');
-    const markdown = markdownContent('```' + language + '\n' + source + '\n```');
-    expect(markdown.html).toBe(rendered);
-    expect(markdown.text).toBe(source);
-    expect(markdown.errors).toEqual([]);
+    const fenced = parse('```' + language + '\n' + source + '\n```');
+    expect(renderHtml(fenced)).toBe(rendered);
+    expect(plainText(fenced)).toBe(source);
     expect(rendered).not.toContain('<script>');
   });
   it('uses escaped plain text for missing, unknown or unsafe language labels', () => {

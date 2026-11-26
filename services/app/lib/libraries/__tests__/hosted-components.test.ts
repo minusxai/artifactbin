@@ -1,7 +1,7 @@
 import {expect,it,onTestFinished} from 'vitest';
 import {readFileSync,writeFileSync} from 'node:fs';
 import path from 'node:path';
-import {brotliDecompressSync} from 'node:zlib';
+import {brotliDecompressSync,gzipSync} from 'node:zlib';
 import {GET as component} from '@/app/af/components/[file]/route';
 import {GET as styles} from '@/app/af/styles.css/route';
 import {referencedLibraryResources} from '../assets.server';
@@ -32,6 +32,21 @@ it('serves each hosted component entry revalidated and its content-addressed chu
  const chunk=chunks(built('select.js').toString())[0]!;expect(chunk).toBeTruthy();
  const shared=await servedFile(chunk);expect(shared.status).toBe(200);expect(shared.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
  for(const refused of ['mermaid.js','deck-gl.js','register-component.js','tabs-model.js','../hosted.json','tabs.ts','chunk-UPPER.js','chunk-missing0.js','deck-gl-engine.js'])expect((await servedFile(refused)).status,refused).toBe(404);
+});
+
+/** `@afbin/markdown` with the chunks it imports statically, gzipped as built: 42,339 B measured 2026-11-26 on the
+ * shared Markdown module (46,447 B on remark before it; 70,905 B with markdown-it's full entity table). */
+const MARKDOWN_GZIP_BUDGET=43*1024;
+const staticClosure=(entry:string)=>{
+ const files=new Set<string>(),pending=[entry];
+ while(pending.length){const file=pending.pop()!;if(files.has(file))continue;files.add(file);
+  for(const match of built(file).toString().matchAll(/(?:\bfrom\s*|\bimport\s*)["']\.\/(chunk-[a-z0-9]+\.js)["']/g))pending.push(match[1]!);}
+ return [...files];
+};
+it(`keeps af-markdown and its static chunks within ${MARKDOWN_GZIP_BUDGET} bytes gzipped, on the slim entity decoder`,()=>{
+ const files=staticClosure('markdown.js');
+ expect(files.length).toBeGreaterThan(1);
+ expect(files.reduce((sum,file)=>sum+gzipSync(built(file)).byteLength,0)).toBeLessThanOrEqual(MARKDOWN_GZIP_BUDGET);
 });
 
 it('admits the component directory as a script source of the sandboxed copy',()=>{
