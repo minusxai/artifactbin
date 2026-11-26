@@ -11,7 +11,8 @@ import { InputRule, inputRules, textblockTypeInputRule, wrappingInputRule }
 import { TextSelection, type Command } from 'prosemirror-state';
 import { fieldExtensions, markdownContent } from './markdown-editor-model';
 import { markdownPaste } from './markdown-editor-paste';
-import { inTable, moveCell, tableFocus } from './markdown-editor-table-commands';
+import { moveCell, tableFocus } from './markdown-editor-table-commands';
+import { indentList } from '../markdown/editing';
 
 /** One toolbar button: what it does, whether it is on there, and whether it shapes blocks. */
 export interface EditorAction { key: string; label: string; title: string;
@@ -100,7 +101,8 @@ const typingRules = (schema: Schema) => {
   ] });
 };
 
-/** Above the elements' own keys; in a table Tab, Shift-Tab and Enter move by cell. */
+/** Above the elements' own keys: in a table Tab, Shift-Tab, Enter and Shift-Enter move by cell;
+ * Tab and Shift-Tab nest list items (lib/markdown/editing.ts, as documents do). */
 const FieldBehaviour = Extension.create({
   name: 'markdownFieldBehaviour',
   priority: 1000,
@@ -116,15 +118,10 @@ const FieldBehaviour = Extension.create({
       ...Object.fromEntries(([1, 2, 3] as const).map(level =>
         [`Mod-Alt-${level}`, () => editor.commands.setHeading({ level })])),
       'Mod-Shift-e': () => editor.commands.toggleCode(),
-      // Tiptap's setHardBreak refuses an isolating parent, which a table cell is.
-      'Shift-Enter': () => inTable(editor.state) ? run((state, dispatch) => {
-        const hardBreak = state.schema.nodes.hardBreak!.create();
-        dispatch?.(state.tr.replaceSelectionWith(hardBreak).scrollIntoView());
-        return true;
-      }) : editor.commands.setHardBreak(),
+      'Shift-Enter': () => run(moveCell('down')) || editor.commands.setHardBreak(),
       Enter: () => run(moveCell('down')),
-      Tab: () => run(moveCell('next')),
-      'Shift-Tab': () => run(moveCell('previous')),
+      Tab: () => run(moveCell('next')) || indentList(editor),
+      'Shift-Tab': () => run(moveCell('previous')) || indentList(editor, true),
     };
   },
 });

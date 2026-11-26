@@ -18,7 +18,7 @@
  * heading); a tight list whose content cannot stay tight becomes loose (serialize.ts's listCanBeTight); the code mark
  * may sit inside bold, italic, strike and links; links take only addresses the display allows.
  */
-import { Extension, Node, type AnyExtension } from '@tiptap/core';
+import { Extension, Mark, Node, type AnyExtension } from '@tiptap/core';
 import Document from '@tiptap/extension-document';
 import Paragraph from '@tiptap/extension-paragraph';
 import Text from '@tiptap/extension-text';
@@ -27,17 +27,20 @@ import Bold from '@tiptap/extension-bold';
 import Italic from '@tiptap/extension-italic';
 import Strike from '@tiptap/extension-strike';
 import Code from '@tiptap/extension-code';
-import Link, { type LinkOptions } from '@tiptap/extension-link';
 import HardBreak from '@tiptap/extension-hard-break';
 import Blockquote from '@tiptap/extension-blockquote';
 import HorizontalRule from '@tiptap/extension-horizontal-rule';
 import CodeBlock from '@tiptap/extension-code-block';
-import { BulletList, ListItem, OrderedList, TaskItem, TaskList } from '@tiptap/extension-list';
-import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
+import { BulletList } from '@tiptap/extension-list/bullet-list';
+import { ListItem } from '@tiptap/extension-list/item';
+import { OrderedList } from '@tiptap/extension-list/ordered-list';
+import { TaskItem } from '@tiptap/extension-list/task-item';
+import { TaskList } from '@tiptap/extension-list/task-list';
 import type { Node as PMNode } from 'prosemirror-model';
 import { Plugin, PluginKey } from 'prosemirror-state';
-import { Decoration, DecorationSet } from 'prosemirror-view';
-import { codeBlockLanguage, codeHighlight } from './code-block';
+import { Decoration, DecorationSet, type EditorView } from 'prosemirror-view';
+import type { codeHighlight as CodeHighlighter } from './code-block';
+import { codeBlockLanguage } from './code-language';
 import { imageAllowed, linkAllowed } from './href';
 import { listCanBeTight } from './serialize';
 import type { LinkClassifier } from './types';
@@ -81,23 +84,45 @@ function headingAnchors(doc: PMNode): DecorationSet {
   });
   return DecorationSet.create(doc, decorations);
 }
+/**
+ * Prism and its grammars (./code-block.ts) are a lazy chunk, loaded by the first code block with a language: an
+ * editor without code never carries them. Until they arrive, code shows unhighlighted; then every open editor
+ * redraws its decorations, in a transaction that changes no content (no update, no history).
+ */
+let highlighter: typeof CodeHighlighter | null = null;
+let loading: Promise<void> | null = null;
+const waiting = new Set<EditorView>();
+const HIGHLIGHTER_LOADED = 'markdownCodeHighlighterLoaded';
+/** Load the highlighter now (an editor does this itself on its first highlightable code block). */
+export function loadCodeHighlighting(): Promise<void> {
+  loading ??= import('./code-block').then(module => {
+    highlighter = module.codeHighlight;
+    for (const view of waiting) if (!view.isDestroyed) view.dispatch(view.state.tr.setMeta(HIGHLIGHTER_LOADED, true).setMeta('addToHistory', false));
+  }, () => undefined);
+  return loading;
+}
 function highlighting(doc: PMNode): DecorationSet {
   const decorations: Decoration[] = [];
   doc.descendants((node, pos) => {
     if (node.type.name !== 'codeBlock') return true;
+    if (!highlighter) {
+      if (codeBlockLanguage(node.textContent, node.attrs.language)) void loadCodeHighlighting();
+      return false;
+    }
     // One decoration per token class over the same run, innermost first: ProseMirror wraps same-range decorations
     // outward in the order given, so the spans nest as renderCodeBlock's do.
-    for (const range of codeHighlight(node.textContent, node.attrs.language)?.ranges ?? []) {
+    for (const range of highlighter(node.textContent, node.attrs.language)?.ranges ?? []) {
       for (const className of [...range.classNames].reverse()) decorations.push(Decoration.inline(pos + 1 + range.from, pos + 1 + range.to, { nodeName: 'span', class: className }));
     }
     return false;
   });
   return DecorationSet.create(doc, decorations);
 }
-const decorating = (name: string, build: (doc: PMNode) => DecorationSet) => new Plugin<DecorationSet>({
+const decorating = (name: string, build: (doc: PMNode) => DecorationSet, views?: Set<EditorView>) => new Plugin<DecorationSet>({
   key: new PluginKey(name),
-  state: { init: (_, state) => build(state.doc), apply: (tr, set) => (tr.docChanged ? build(tr.doc) : set) },
+  state: { init: (_, state) => build(state.doc), apply: (tr, set) => (tr.docChanged || tr.getMeta(HIGHLIGHTER_LOADED) ? build(tr.doc) : set) },
   props: { decorations(state) { return this.getState(state); } },
+  view: view => { views?.add(view); return { destroy: () => views?.delete(view) }; },
 });
 
 /** Heading anchors, code highlighting, task toggling and list tightness: the behaviour the elements share. */
@@ -106,7 +131,7 @@ const MarkdownBehaviour = Extension.create({
   addProseMirrorPlugins() {
     return [
       decorating('markdownHeadingAnchors', headingAnchors),
-      decorating('markdownCodeHighlight', highlighting),
+      decorating('markdownCodeHighlight', highlighting, waiting),
       new Plugin({
         key: new PluginKey('markdownTaskToggle'),
         props: {
@@ -144,18 +169,39 @@ const MarkdownBehaviour = Extension.create({
   },
 });
 
-const MarkdownLink = Link.extend<LinkOptions & { classify?: LinkClassifier }>({
-  addAttributes() {
-    return { href: { default: null, parseHTML: (element: HTMLElement) => element.getAttribute('href') }, title: { default: null } };
-  },
+/** Our own link mark (not @tiptap/extension-link, whose autolinking brings linkifyjs): no commands, no autolink. */
+const MarkdownLink = Mark.create<{ classify?: LinkClassifier }>({
+  name: 'link',
+  priority: 1000,
+  inclusive: false,
+  keepOnSplit: false,
+  exitable: true,
+  addOptions: () => ({ classify: undefined }),
+  addAttributes: () => ({ href: { default: null, parseHTML: (element: HTMLElement) => element.getAttribute('href') }, title: { default: null } }),
+  parseHTML: () => [{ tag: 'a[href]', getAttrs: (element: HTMLElement) => (linkAllowed(element.getAttribute('href') ?? '') ? null : false) }],
   renderHTML({ mark }) {
     const href = linkAllowed(String(mark.attrs.href ?? '')) ? mark.attrs.href : null;
     return ['a', { href, title: mark.attrs.title, 'data-mx-link': href ? this.options.classify?.(href) ?? null : null }, 0];
   },
-  addOptions() {
-    return { ...this.parent!(), classify: undefined as LinkClassifier | undefined };
-  },
 });
+/**
+ * Our own table nodes (not @tiptap/extension-table, which brings prosemirror-tables): a header row and body rows of
+ * inline cells, aligned per cell, never merged. Surfaces move between cells and repair a table's shape themselves.
+ */
+const tableNode = (name: string, tag: 'th' | 'td') => Node.create({
+  name,
+  content: 'inline*',
+  isolating: true,
+  addAttributes: () => align,
+  parseHTML: () => [{ tag }],
+  renderHTML: ({ node }) => [tag, cellAttributes(node), 0],
+});
+const TableNodes = [
+  Node.create({ name: 'table', group: 'block', content: 'tableRow+', isolating: true, parseHTML: () => [{ tag: 'table' }], renderHTML: () => ['div', { class: 'mx-md-table-scroll' }, ['table', ['tbody', 0]]] }),
+  Node.create({ name: 'tableRow', content: '(tableCell | tableHeader)*', parseHTML: () => [{ tag: 'tr' }], renderHTML: () => ['tr', 0] }),
+  tableNode('tableHeader', 'th'),
+  tableNode('tableCell', 'td'),
+];
 
 function imageNode(address: MarkdownEditorOptions['imageAddress']) {
   return Node.create({
@@ -206,7 +252,7 @@ export function markdownExtensions(options: MarkdownEditorOptions = {}): AnyExte
     Paragraph,
     Text,
     Heading.extend({ content: images ? '(text | image)*' : 'text*' }),
-    MarkdownLink.configure({ openOnClick: false, autolink: false, linkOnPaste: false, isAllowedUri: url => linkAllowed(url), classify: options.classifyLink }),
+    MarkdownLink.configure({ classify: options.classifyLink }),
     Bold,
     Italic,
     Strike,
@@ -250,12 +296,7 @@ export function markdownExtensions(options: MarkdownEditorOptions = {}): AnyExte
         };
       },
     }),
-    Table.configure({ resizable: false, View: null, allowTableNodeSelection: false }).extend({
-      renderHTML: () => ['div', { class: 'mx-md-table-scroll' }, ['table', ['tbody', 0]]],
-    }),
-    TableRow,
-    TableHeader.extend({ content: 'inline*', addAttributes() { return { ...this.parent!(), ...align }; }, renderHTML: ({ node }) => ['th', cellAttributes(node), 0] }),
-    TableCell.extend({ content: 'inline*', addAttributes() { return { ...this.parent!(), ...align }; }, renderHTML: ({ node }) => ['td', cellAttributes(node), 0] }),
+    ...TableNodes,
     ...(images ? [imageNode(options.imageAddress)] : []),
     MarkdownBehaviour,
   ];

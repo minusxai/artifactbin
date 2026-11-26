@@ -1,12 +1,14 @@
 /**
  * Internal: af-markdown-editor's paste. Plain text reads as Markdown, except in code, in a table
  * cell or with Shift held (Mod-Shift-V); HTML tables a Markdown grid cannot hold (merged cells,
- * captions) become one paragraph per row. Used by markdown-editor-commands.ts.
+ * captions) become one paragraph per row; unsafe links are dropped (freshClipboard).
+ * Used by markdown-editor-commands.ts.
  */
 import { Fragment, Slice, type Schema } from 'prosemirror-model';
 import { Plugin } from 'prosemirror-state';
 import { parseMarkdown } from './markdown-editor-model';
 import { inTable } from './markdown-editor-table-commands';
+import { freshClipboard } from '../markdown/editing';
 
 function normalizeHTMLTables(html: string, document: Document): string {
   if (!/<table[\s>]/i.test(html)) return html;
@@ -48,6 +50,7 @@ export function markdownPaste(): Plugin {
   return new Plugin({
     props: {
       transformPastedHTML: (html, view) => normalizeHTMLTables(html, view.dom.ownerDocument),
+      transformPasted: slice => freshClipboard(slice),
       handleDOMEvents: {
         // Shift+Insert is an ordinary paste.
         keydown: (_view, event) => { plain = event.shiftKey && event.keyCode !== 45; },

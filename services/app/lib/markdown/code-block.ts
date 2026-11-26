@@ -1,16 +1,8 @@
 import Prism from './prism-grammars';
 import { escapeHtml } from '@artifactbin/utils/escape';
+import { MAX_HIGHLIGHT_CODE_LENGTH, normalizeLanguage } from './code-language';
 
-/** Keep parsing synchronous and predictable for saved-document SSR. */
-export const MAX_HIGHLIGHT_CODE_LENGTH = 100_000;
-
-const aliases = new Map<string, string>([
-  ['html', 'html'], ['htm', 'html'], ['xml', 'html'],
-  ['md', 'markdown'], ['markdown', 'markdown'], ['mdx', 'markdown'],
-  ['js', 'javascript'], ['javascript', 'javascript'], ['mjs', 'javascript'], ['cjs', 'javascript'],
-  ['ts', 'typescript'], ['typescript', 'typescript'], ['mts', 'typescript'], ['cts', 'typescript'],
-  ['css', 'css'], ['jsx', 'jsx'], ['tsx', 'tsx'],
-]);
+export { MAX_HIGHLIGHT_CODE_LENGTH };
 
 const tokenClasses = new Map<string, string>([
   ['keyword', 'mx-code-token-keyword'], ['boolean', 'mx-code-token-literal'], ['constant', 'mx-code-token-type'],
@@ -26,12 +18,6 @@ const tokenClasses = new Map<string, string>([
 
 type PrismToken = { type: string; content: string | readonly (string | PrismToken)[]; alias?: string | readonly string[] };
 type PrismGrammar = Record<string, unknown>;
-
-function normalizeLanguage(language?: string | null): string | null {
-  if (!language || language.length > 64) return null;
-  const name = language.trim().toLowerCase().replace(/^\./, '').split(/[\s,{]/, 1)[0];
-  return aliases.get(name) ?? null;
-}
 
 function renderTokens(tokens: readonly (string | PrismToken)[]): string {
   return tokens.map(token => {
@@ -58,12 +44,6 @@ export function renderCodeBlock(source: string, language?: string | null): strin
   } catch {
     return `<pre><code>${escapeHtml(source)}</code></pre>`;
   }
-}
-
-/** The language renderCodeBlock marks `source` with (`class="language-<x>"`), without tokenizing it; null for plain text. */
-export function codeBlockLanguage(source: string, language?: string | null): string | null {
-  const canonical = normalizeLanguage(language);
-  return canonical && source.length <= MAX_HIGHLIGHT_CODE_LENGTH && Prism.languages[canonical] ? canonical : null;
 }
 
 interface Highlighted { language: string; tokens: (string | PrismToken)[] }

@@ -6,7 +6,7 @@
  */
 import { NodeSelection, type Command, type EditorState } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
-import { imageAllowed } from '../markdown/display';
+import { imageAllowed } from '../markdown/editor';
 import { editTable, insertTable, inTable, maxDimension } from './markdown-editor-table-commands';
 
 type View = () => EditorView;

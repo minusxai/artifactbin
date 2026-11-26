@@ -48,10 +48,10 @@ it(`keeps af-markdown and its static chunks within ${MARKDOWN_GZIP_BUDGET} bytes
  expect(files.length).toBeGreaterThan(1);
  expect(files.reduce((sum,file)=>sum+gzipSync(built(file)).byteLength,0)).toBeLessThanOrEqual(MARKDOWN_GZIP_BUDGET);
 });
-/** `@afbin/markdown-editor` with its static chunks, gzipped as built: 199,117 B measured 2026-11-26 on the shared Markdown
- * module's Tiptap editor (107,378 B on raw ProseMirror before it). Most is ProseMirror and Tiptap; the shared elements
- * also bring prosemirror-tables, linkify and the code grammars. */
-const MARKDOWN_EDITOR_GZIP_BUDGET=198*1024;
+/** `@afbin/markdown-editor` with its static chunks, gzipped as built: 156,369 B measured 2026-11-26 on the shared Markdown
+ * module's Tiptap editor (107,378 B on raw ProseMirror before it), with our own link mark and table nodes (no linkifyjs,
+ * no prosemirror-tables) and the code highlighter as a lazy chunk. Most of it is ProseMirror, Tiptap and markdown-it. */
+const MARKDOWN_EDITOR_GZIP_BUDGET=155*1024;
 it(`keeps af-markdown-editor and its static chunks within ${MARKDOWN_EDITOR_GZIP_BUDGET} bytes gzipped, with no Yjs`,()=>{
  const files=staticClosure('markdown-editor.js');
  expect(files.reduce((sum,file)=>sum+gzipSync(built(file)).byteLength,0)).toBeLessThanOrEqual(MARKDOWN_EDITOR_GZIP_BUDGET);

@@ -7,6 +7,7 @@ import { closeHistory } from 'prosemirror-history';
 import { NodeSelection, TextSelection } from 'prosemirror-state';
 import { mountEditor } from './markdown-editor-commands';
 import { serializeMarkdown } from './markdown-editor-model';
+import { loadCodeHighlighting } from '../markdown/editor';
 import './markdown-editor';
 
 type Field = HTMLElement & { value: string | null };
@@ -107,11 +108,12 @@ describe('what the field gained', () => {
     caretIn(code.editor, 'code');
     expect(code.button('image').disabled).toBe(true);
   });
-  it('highlights code with the shared code tokens', () => {
+  it('highlights code with the shared code tokens', async () => {
     const { surface } = field({ value: '```ts\nconst a = 1;\n```' });
+    await loadCodeHighlighting();
     expect(surface.querySelector('pre code .mx-code-token-keyword')?.textContent).toBe('const');
   });
-  it('takes the list shortcuts and nests list items with Tab, leaving Tab it cannot use to the page', () => {
+  it('takes the list shortcuts and nests list items with Tab as documents do, leaving Tab outside a list to the page', () => {
     const { changes, editor } = field({ 'default-value': 'one' });
     caretIn(editor, 'one');
     press(editor, 'Mod-Shift-8'); expect(changes.at(-1)).toBe('- one');
@@ -122,7 +124,7 @@ describe('what the field gained', () => {
     expect(press(list.editor, 'Tab')).toBe(true); expect(list.changes.at(-1)).toBe('- a\n  - b');
     press(list.editor, 'Shift-Tab'); expect(list.changes.at(-1)).toBe('- a\n- b');
     caretIn(list.editor, 'a');
-    expect(press(list.editor, 'Tab')).toBe(false); expect(list.changes.at(-1)).toBe('- a\n- b');
+    expect(press(list.editor, 'Tab')).toBe(true); expect(list.changes.at(-1)).toBe('- a\n- b');
     const prose = field({ 'default-value': 'plain' });
     caretIn(prose.editor, 'plain');
     expect(press(prose.editor, 'Tab')).toBe(false); expect(prose.changes).toEqual([]);
@@ -141,11 +143,16 @@ describe('what the field kept', () => {
     press(editor, 'Mod-z'); expect(changes.at(-1)).toBe('## ~~Title~~');
     press(editor, 'Shift-Mod-z'); expect(changes.at(-1)).toBe('~~Title~~');
   });
-  it('breaks a line with Shift-Enter, in a paragraph and in a table cell', () => {
+  it('breaks a line with Shift-Enter, and in a table moves down a cell with it as today', () => {
     const { changes, editor } = field({ 'default-value': 'ab\n\n| h |\n| --- |\n| cd |' });
     caretIn(editor, 'ab', 1); press(editor, 'Shift-Enter');
-    caretIn(editor, 'cd', 1); press(editor, 'Shift-Enter');
-    expect(changes.at(-1)).toBe('a\nb\n\n| h |\n| --- |\n| c<br>d |');
+    expect(changes.at(-1)).toBe('a\nb\n\n| h |\n| --- |\n| cd |');
+    caretIn(editor, 'h'); press(editor, 'Shift-Enter');
+    expect(editor.state.selection.$from.parent.textContent).toBe('cd');
+    press(editor, 'Shift-Enter');
+    expect(editor.state.selection.$from.parent.type.name).toBe('paragraph');
+    expect(editor.state.selection.$from.index(0)).toBe(2);
+    expect(changes.at(-1)).toBe('a\nb\n\n| h |\n| --- |\n| cd |');
   });
   it('keeps safe links on paste, tel: included, and never copies or pastes an unsafe one', () => {
     const { editor, changes } = field({ 'default-value': '' });
@@ -196,6 +203,8 @@ describe('what the field kept', () => {
   });
   it('has history, the gap cursor and the drop cursor', () => {
     const names = field({}).editor.extensionManager.extensions.map(extension => extension.name);
-    expect(names).toEqual(expect.arrayContaining(['gapCursor', 'dropCursor', 'markdownFieldBehaviour']));
+    expect(names).toEqual(expect.arrayContaining(['cursors', 'markdownFieldBehaviour']));
+    const plugins = field({}).editor.state.plugins.map(plugin => (plugin as unknown as { key: string }).key);
+    expect(plugins).toEqual(expect.arrayContaining(['history$']));
   });
 });
