@@ -8,7 +8,7 @@
  * `import("x")` types, type-only included — read with the TypeScript parser. Each import records whether it is
  * type-only (`import type`, `export type`, every named specifier marked `type`, or an `import("x")` type).
  *
- * Five rules:
+ * Six rules:
  *   1. no cycle may contain an entry point or the UI (ENTRY_OR_UI below);
  *   2. a package imports only `pkg/contracts`, `pkg/utils` and itself;
  *   3. every edge inside a cycle is recorded in module-graph.allowed-cycles.json, and every recorded
@@ -23,6 +23,10 @@
  *      edit to the table, and every listed entry and leaf must still be imported, so the lists only shrink. Tests and
  *      harnesses are held to rule 4 alone: their own module freely, another module through its entries, test-only
  *      entries and leaves, or a white-box import recorded in module-graph.allowed-test-imports.json.
+ *      A row's `awaitingImporters` are leaves declared before their first importer (a new module's doors, ahead of
+ *      the change that moves a surface onto them): not stale while unimported, and refused once imported.
+ *   6. a package one lib module owns (PACKAGE_OWNERS) is imported by non-test source only inside that module and from
+ *      the importers that predate the rule; each listed importer must still import it, so the list only shrinks.
  *
  */
 import { execFileSync } from 'node:child_process';
@@ -171,7 +175,7 @@ const BUNDLED_LEAVES = {
     'shared-request', 'urls',
   ],
   'lib/local-connection': ['browser'],
-  'lib/markdown': ['content', 'code-block'],
+  'lib/markdown': ['content', 'code-block', 'display', 'editor'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/html-systems': ['story-systems', 'story-themes', ],
   'lib/workspace': ['artifact-starters', 'breadcrumb', 'visibility-icons'],
@@ -236,6 +240,27 @@ export const DEEP_MODULES = {
   'lib/object-store': { entries: [''] },
   // server.ts imports these two statically, before it reads configuration; the index loads lib/platform.
   'lib/runtime': { entries: ['', 'dev-vite', 'request-log'] },
+  // The shared Markdown module's display (parse, renderHtml) and editor (Tiptap elements, serialize) entries, ahead
+  // of the surfaces (af-markdown, comments, the Markdown field, documents) that move onto them one change at a time.
+  'lib/markdown': { ...bundled('lib/markdown'), awaitingImporters: ['display', 'editor'] },
+};
+/**
+ * Rule 6: the Markdown parser and serializer packages belong to lib/markdown, the one place Markdown is read and
+ * written. Its importers from before the rule are listed and move onto the module one surface at a time.
+ */
+export const PACKAGE_OWNERS = {
+  'markdown-it': {
+    owner: 'lib/markdown',
+    importers: ['services/app/lib/html-components/markdown-editor-model.ts', 'services/app/skills/artifactbin/components/markdown-editor-model.ts'],
+  },
+  'prosemirror-markdown': {
+    owner: 'lib/markdown',
+    importers: [
+      'services/app/lib/html-components/markdown-editor-model.ts', 'services/app/lib/live-regions/markdown.ts',
+      'services/app/lib/live-regions/native-markdown.ts', 'services/app/lib/live-regions/source-html.ts',
+      'services/app/skills/artifactbin/components/markdown-editor-model.ts',
+    ],
+  },
 };
 /** A lib module without a row: entered only through its index (rule 4's default). */
 const INDEX_ONLY = Object.freeze({ entries: [''] });
@@ -345,7 +370,7 @@ function deepModuleViolations(graph, table) {
   const modules = [...new Set([...Object.keys(table), ...[...graph.keys()].filter(module => module.startsWith('lib/'))])].sort();
   for (const module of modules) {
     if (!graph.has(module)) continue;
-    const { entries, downstream = [], serverOnly = [], testOnly = [], browserImporters = [], browserLeaves = [], browserLeavesOnly = false, leavesForAll = false } = table[module] ?? INDEX_ONLY;
+    const { entries, downstream = [], serverOnly = [], testOnly = [], browserImporters = [], browserLeaves = [], browserLeavesOnly = false, leavesForAll = false, awaitingImporters = [] } = table[module] ?? INDEX_ONLY;
     const dir = `services/app/${module}`;
     const refused = [], serverRefused = [], testRefused = [], used = new Set(), usedLeaves = new Set();
     for (const [from, edges] of [...graph].sort(([a], [b]) => a.localeCompare(b))) {
@@ -376,7 +401,9 @@ function deepModuleViolations(graph, table) {
       : table[module] ? `${module} is entered from outside only through its entries, and from its browser importers also through its browser leaves (${lists} in scripts/ci/module-graph.mjs): re-export the name from ${dir}/index.ts or list the path as a reviewed edit in DEEP_MODULES:`
         : `${module} has no DEEP_MODULES row, so code outside it imports only its index (rule 4's default, scripts/ci/module-graph.mjs): re-export the name from ${dir}/index.ts, or give the module a row listing the path as a reviewed edit:`, ...refused);
     const staleEntries = entries.filter(entry => entry !== '' && !used.has(entry));
-    const staleLeaves = browserLeaves.filter(leaf => !usedLeaves.has(leaf));
+    const staleLeaves = browserLeaves.filter(leaf => !usedLeaves.has(leaf) && !awaitingImporters.includes(leaf));
+    const arrived = awaitingImporters.filter(leaf => usedLeaves.has(leaf) || used.has(leaf));
+    if (arrived.length) violations.push(`${module} leaves that now have importers are still listed as awaiting them; remove them from awaitingImporters in DEEP_MODULES['${module}'], scripts/ci/module-graph.mjs:`, ...arrived.map(leaf => `  ${leaf}`));
     if (browserLeavesOnly) {
       if (staleLeaves.length) violations.push(`${module} leaves no browser-bundled code imports any more; remove them from ${constantPrefix(module)}_BROWSER_LEAVES in scripts/ci/module-graph.mjs:`, ...staleLeaves.map(leaf => `  ${leaf}`));
     } else if (staleEntries.length || staleLeaves.length) {
@@ -429,6 +456,21 @@ export function recordTestImports(graph, table = DEEP_MODULES) {
 }
 const constantPrefix = module => module.slice('lib/'.length).toUpperCase().replace(/-/g, '_');
 
+const packageOf = specifier => (/^[@a-z]/.test(specifier) && !specifier.startsWith('@/') ? specifier.split('/').slice(0, specifier.startsWith('@') ? 2 : 1).join('/') : null);
+/** Rule 6 (for each owner this tree has): an owned package imported outside its owner by an unlisted file, and listed importers that no longer import it. */
+function packageOwnerViolations(graph, owners) {
+  const violations = [], imports = graph.packages;
+  for (const [name, { owner, importers }] of Object.entries(owners)) {
+    if (!graph.has(owner)) continue;
+    const outside = [...new Set(imports.filter(({ file, specifier }) => packageOf(specifier) === name && moduleOf(file) !== owner).map(({ file }) => file))].sort();
+    const refused = outside.filter(file => !importers.includes(file));
+    const stale = importers.filter(file => !outside.includes(file));
+    if (refused.length) violations.push(`${name} belongs to ${owner} (PACKAGE_OWNERS in scripts/ci/module-graph.mjs): read and write Markdown through services/app/${owner}'s display or editor entry instead of importing ${name}:`, ...refused.map(file => `  ${file} imports ${name}`));
+    if (stale.length) violations.push(`Listed ${name} importer(s) no longer import it; remove them from PACKAGE_OWNERS['${name}'] in scripts/ci/module-graph.mjs:`, ...stale.map(file => `  ${file}`));
+  }
+  return violations;
+}
+
 /** Graph: Map<from, Map<to, [{ file, specifier }]>> over cross-module imports. */
 function buildModuleGraph(imports) {
   const graph = new Map();
@@ -451,6 +493,8 @@ export const scanModuleGraph = (root) => {
   const sources = listSourceFiles(root), imports = scanImports(root, sources);
   return Object.assign(buildModuleGraph(imports), {
     tests: buildModuleGraph(scanImports(root, listSourceFiles(root, true))),
+    // Non-test source's npm imports, for rule 6.
+    packages: imports.filter(({ specifier }) => packageOf(specifier) !== null),
   });
 };
 
@@ -482,7 +526,7 @@ const edgesWithin = (graph, members) => {
   return members.flatMap(from => [...graph.get(from).keys()].filter(to => inside.has(to)).sort().map(to => [from, to]));
 };
 
-export function checkModuleGraph(graph, allowed, _legacy = undefined, deepModules = DEEP_MODULES) {
+export function checkModuleGraph(graph, allowed, _legacy = undefined, deepModules = DEEP_MODULES, packageOwners = PACKAGE_OWNERS) {
   const violations = [];
   const allowedEdges = new Set((allowed.cycles ?? []).flatMap(cycle => cycle.edges));
   const cyclicEdges = new Set();
@@ -507,6 +551,7 @@ export function checkModuleGraph(graph, allowed, _legacy = undefined, deepModule
     if (outside.length) violations.push(`Package ${from} may import only ${PACKAGE_FLOOR.join(', ')} and itself:`, ...outside.map(to => describeEdge(graph, from, to)));
   }
   violations.push(...deepModuleViolations(graph, deepModules));
+  if (graph.packages) violations.push(...packageOwnerViolations(graph, packageOwners));
   if (graph.tests) violations.push(...testDeepModuleViolations(graph.tests, deepModules, allowed.testImports));
   return { violations };
 }

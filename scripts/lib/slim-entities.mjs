@@ -13,7 +13,7 @@
  */
 import { fileURLToPath } from 'node:url';
 
-export const SLIM_ENTITIES = fileURLToPath(new URL('../../services/app/lib/markdown/entities.ts', import.meta.url));
+const SLIM_ENTITIES = fileURLToPath(new URL('../../services/app/lib/markdown/entities.ts', import.meta.url));
 const MARKDOWN_IT = /[\\/]node_modules[\\/]markdown-it[\\/]/;
 const redirect = (specifier, importer) => specifier === 'entities' && !!importer && MARKDOWN_IT.test(importer);
 

@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { checkModuleGraph, DEEP_MODULES, moduleOf, recordAllowedCycles, recordTestImports, scanModuleGraph } from '../ci/module-graph.mjs';
+import { checkModuleGraph, DEEP_MODULES, moduleOf, PACKAGE_OWNERS, recordAllowedCycles, recordTestImports, scanModuleGraph } from '../ci/module-graph.mjs';
 import {tempDirSync} from '../../services/test-support/src/temp-dir.ts';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..');
@@ -399,12 +399,53 @@ describe('module graph', () => {
     expect(checkModuleGraph(scanModuleGraph(tree({ ...files, 'services/app/lib/runner/b.ts': "import '@/lib/operations/http';\n" })), allowList([])).violations).toEqual([]);
   });
 
+  describe('leaves awaiting their first importer (rule 4, awaitingImporters)', () => {
+    const table = { 'lib/md': { entries: [''], browserImporters: [], browserLeaves: ['old', 'fresh'], leavesForAll: true, awaitingImporters: ['fresh'] } };
+    const base = { 'services/app/lib/md/old.ts': "import './fresh';\n", 'services/app/lib/md/fresh.ts': '', 'services/app/lib/page/a.ts': "import '@/lib/md/old';\n" };
+    const check = files => checkModuleGraph(scanModuleGraph(tree({ ...base, ...files })), allowList([]), undefined, table, {}).violations.join('\n');
+
+    it('passes an awaiting leaf nothing imports yet, while an ordinary unimported leaf is still stale', () => {
+      expect(check({})).toBe('');
+      expect(checkModuleGraph(scanModuleGraph(tree({ ...base, 'services/app/lib/page/a.ts': '' })), allowList([]), undefined, table, {}).violations.join('\n')).toContain('browser leaf old');
+    });
+    it('refuses an awaiting leaf once something imports it, so the list only shrinks', () => {
+      expect(check({ 'services/app/lib/page/b.ts': "import '@/lib/md/fresh';\n" })).toMatch(/lib\/md leaves that now have importers are still listed as awaiting them[\s\S]*\n  fresh$/);
+    });
+  });
+
+  describe('packages a lib module owns (rule 6)', () => {
+    const owners = { 'markdown-it': { owner: 'lib/md', importers: ['services/app/lib/old/legacy.ts'] } };
+    const base = {
+      'services/app/lib/md/index.ts': "import MarkdownIt from 'markdown-it';\nexport type T = import('markdown-it/lib/token.mjs').default;\n",
+      'services/app/lib/old/legacy.ts': "import MarkdownIt from 'markdown-it';\n",
+      'services/app/lib/md/__tests__/x.test.ts': "import 'markdown-it';\n",
+      'services/app/lib/other/__tests__/y.test.ts': "import 'markdown-it';\n",
+    };
+    const check = files => checkModuleGraph(scanModuleGraph(tree({ ...base, ...files })), allowList([]), undefined, {}, owners).violations.join('\n');
+
+    it('passes the owner, a listed importer and tests', () => {
+      expect(check({})).toBe('');
+    });
+    it('refuses any other importer, a subpath or a type import included, naming the file', () => {
+      const violations = check({ 'services/app/lib/new/a.ts': "import MarkdownIt from 'markdown-it';\n", 'services/app/solid/b.tsx': "export type T = import('markdown-it/lib/token.mjs').default;\n" });
+      expect(violations).toContain('markdown-it belongs to lib/md (PACKAGE_OWNERS in scripts/ci/module-graph.mjs)');
+      expect(violations).toContain('  services/app/lib/new/a.ts imports markdown-it');
+      expect(violations).toContain('  services/app/solid/b.tsx imports markdown-it');
+    });
+    it('fails a listed importer that no longer imports the package', () => {
+      expect(check({ 'services/app/lib/old/legacy.ts': '' })).toMatch(/Listed markdown-it importer\(s\) no longer import it[\s\S]*\n  services\/app\/lib\/old\/legacy\.ts$/);
+    });
+    it('gives markdown-it and prosemirror-markdown to lib/markdown', () => {
+      expect(Object.fromEntries(Object.entries(PACKAGE_OWNERS).map(([name, { owner }]) => [name, owner]))).toEqual({ 'markdown-it': 'lib/markdown', 'prosemirror-markdown': 'lib/markdown' });
+    });
+  });
+
   it('records today\'s library cycles as the allow-list', () => {
     expect(recordAllowedCycles(scanModuleGraph(tree(libCycle))).cycles).toEqual([ab]);
   });
 
   it('names in DEEP_MODULES only modules this repository has, each row with only the keys rule 4 reads', () => {
-    const keys = ['entries', 'downstream', 'serverOnly', 'testOnly', 'browserImporters', 'browserLeaves', 'browserLeavesOnly', 'leavesForAll'];
+    const keys = ['entries', 'downstream', 'serverOnly', 'testOnly', 'browserImporters', 'browserLeaves', 'browserLeavesOnly', 'leavesForAll', 'awaitingImporters'];
     for (const [module, row] of Object.entries(DEEP_MODULES)) {
       const at = path.join(ROOT, 'services/app', module);
       expect(fs.existsSync(at) || fs.existsSync(`${at}.ts`), `${module} names no module`).toBe(true);

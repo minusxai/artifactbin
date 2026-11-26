@@ -142,7 +142,7 @@ const title = (value: unknown) => (value ? ` "${references(String(value).replace
  * A textblock's inline content as Markdown lines (`\n` between lines). Links written bare or as `<href>` are checked
  * by reading the whole line back (linkify can reach past its neighbours); if it differs, every link gets brackets.
  */
-export function inlineMarkdown(parent: PMNode, context: InlineContext): string {
+function inlineMarkdown(parent: PMNode, context: InlineContext): string {
   const short = writeInline(parent, context, true);
   if (!short.shortLinks) return short.markdown;
   const nodes: PMNode[] = [];
@@ -163,7 +163,8 @@ function writeInline(parent: PMNode, context: InlineContext, shortLinks: boolean
   const pieces: Piece[] = [];
   const open: Mark[] = [];
   let lineStart = true;
-  const outText = () => pieces.map(piece => piece.out).join('');
+  /** The last character written so far. */
+  const lastWritten = () => { for (let i = pieces.length - 1; i >= 0; i--) if (pieces[i]!.out) return Array.from(pieces[i]!.out).at(-1)!; return ''; };
   const delimiters = new Map<Mark, string>();
   const closeMark = (mark: Mark) => {
     if (mark.type.name === 'link') {
@@ -190,7 +191,7 @@ function writeInline(parent: PMNode, context: InlineContext, shortLinks: boolean
     const lasts = (mark: Mark) => { let end = index; while (end + 1 < nodes.length && mark.isInSet(nodes[end + 1]!.marks)) end++; return end; };
     for (const mark of wanted.filter(mark => !mark.isInSet(open)).sort((a, b) => lasts(b) - lasts(a) || RANK.indexOf(a.type.name) - RANK.indexOf(b.type.name))) {
       if (mark.type.name === 'link') {
-        const shape = !shortLinks || pieces.at(-1)?.kind === 'delim' ? 'brackets' : linkShape(nodes, index, mark, outText());
+        const shape = !shortLinks || pieces.at(-1)?.kind === 'delim' ? 'brackets' : linkShape(nodes, index, mark, lastWritten());
         linkRuns.set(mark, shape);
         pieces.push({ kind: 'raw', out: shape === 'bare' ? '' : shape === 'angle' ? '<' : '[' });
       } else {
@@ -219,7 +220,7 @@ function writeInline(parent: PMNode, context: InlineContext, shortLinks: boolean
     lines.forEach((text, line) => {
       if (line) lineBreak();
       if (!text) return;
-      pieces.push(...textPieces(text, { lineStart: lineStart && !context.heading, brackets: inLink, cell: context.cell, itemStart: context.itemStart && index === 0 && line === 0, last: index === nodes.length - 1 && line === lines.length - 1 }));
+      for (const piece of textPieces(text, { lineStart: lineStart && !context.heading, brackets: inLink, cell: context.cell, itemStart: context.itemStart && index === 0 && line === 0, last: index === nodes.length - 1 && line === lines.length - 1 })) pieces.push(piece);
       lineStart = false;
     });
   });
@@ -229,7 +230,7 @@ function writeInline(parent: PMNode, context: InlineContext, shortLinks: boolean
 }
 
 /** How a link whose run starts at `index` is written: bare or `<href>` only when that reads back as this link. */
-function linkShape(nodes: PMNode[], index: number, mark: Mark, before: string): 'bare' | 'angle' | 'brackets' {
+function linkShape(nodes: PMNode[], index: number, mark: Mark, previous: string): 'bare' | 'angle' | 'brackets' {
   const node = nodes[index]!, next = nodes[index + 1];
   if (mark.attrs.title || !node.isText || node.marks.length !== 1) return 'brackets';
   if (next && next.marks.some(other => other.eq(mark))) return 'brackets';
@@ -239,7 +240,6 @@ function linkShape(nodes: PMNode[], index: number, mark: Mark, before: string): 
   const after = !next ? '' : next.type.name === 'hardBreak' ? '\n' : next.isText && !next.marks.length && !lineEndSpace
     ? textPieces(next.text!, { lineStart: false, brackets: false, cell: false, itemStart: false, last: !following }).slice(0, 2).map(piece => piece.out).join('') : null;
   if (after === null) return 'brackets';
-  const previous = Array.from(before).at(-1) ?? '';
   if (readsAsLink(previous, node.text!, after === '\n' ? '' : after, mark.attrs.href, node.text!)) return 'bare';
   return /^[A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*$/.test(mark.attrs.href) && readsAsLink(previous, `<${mark.attrs.href}>`, after === '\n' ? '' : after, mark.attrs.href, node.text!) ? 'angle' : 'brackets';
 }

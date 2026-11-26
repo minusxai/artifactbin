@@ -51,3 +51,22 @@ export const SAMPLES: ReadonlyArray<readonly [string, string]> = [
   ['deep quote', deepQuote(30)],
   ['long line', 'word '.repeat(200)],
 ];
+
+/**
+ * Entity text and its shared markup, the same in Node, jsdom and a browser bundle: numeric and common named
+ * references decode, rare names stay as typed, and a reference hidden in a scheme decodes before the link check.
+ */
+export const ENTITY_SAMPLES: readonly string[] = [
+  '&amp; &lt; &gt; &quot; &apos; &nbsp; &copy; &mdash; &hellip; &check;',
+  '&#65; &#x42; &#X43; &#0; &#xD800; &#1114112; &#128512;',
+  '&alpha; &Alpha; &AMP; &amp &unknown; &#; &#x;',
+  '[a](x&alpha;y) [b](x&amp;y "t&copy;") [c](java&Tab;script:x) [d](java&colon;x)',
+  '```&alpha;\nx\n```',
+];
+export const ENTITY_HTML: readonly string[] = [
+  '<p>&amp; &lt; &gt; " \' \u00a0 © — … ✓</p>',
+  '<p>A B C \ufffd \ufffd \ufffd 😀</p>',
+  '<p>&amp;alpha; &amp;Alpha; &amp;AMP; &amp;amp &amp;unknown; &amp;#; &amp;#x;</p>',
+  '<p><a href="x&amp;alpha;y">a</a> <a href="x&amp;y" title="t©">b</a> [c](java&amp;Tab;script:x) [d](java&amp;colon;x)</p>',
+  '<pre><code>x</code></pre>',
+];

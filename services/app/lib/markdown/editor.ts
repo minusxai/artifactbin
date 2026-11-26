@@ -11,7 +11,7 @@ import { markdownExtensions, type MarkdownEditorOptions } from './extensions';
 
 export { parse } from './parse';
 export { markdownExtensions, EDITOR_ONLY_MARKUP, type MarkdownEditorOptions } from './extensions';
-export { serialize, listCanBeTight, type SerializeOptions } from './serialize';
+export { serialize, type SerializeOptions } from './serialize';
 export type { MarkdownDoc, MarkdownNode, ParseOptions } from './types';
 
 /** The schema the extensions define, for serializing or checking a document without an editor. */

@@ -69,6 +69,8 @@ export default {
         // The public custom-element entry points in build-html-components.
         ...hostedComponents.map((name) => `lib/html-components/${name}.ts!`),
         'lib/libraries/*.js!', 'web/solid-entry.tsx!', 'web/shell.css!',
+        // The shared Markdown module's two doors, ahead of the surfaces that move onto them (DEEP_MODULES' awaitingImporters).
+        'lib/markdown/{display,editor}.ts!',
         // Server bundle workers (scripts/build/build-server.mjs).
         'lib/viz/chart-image-worker.ts!', 'lib/viz/chart-image-worker-dev.mjs',
         // The app's font faces, which the root vite.config.mts writes into the built SPA.

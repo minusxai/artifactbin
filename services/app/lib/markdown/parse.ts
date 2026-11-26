@@ -55,8 +55,9 @@ const asTypedWhenRefused = (original: InlineRule): InlineRule => (state, silent)
   const start = state.pos, from = state.tokens.length;
   const matched = original(state, silent);
   if (!matched || silent) return matched;
-  const at = state.tokens.findIndex((token, index) => index >= from && (token.type === 'link_open' || token.type === 'image'));
-  if (at < 0) return true;
+  let at = from;
+  while (at < state.tokens.length && state.tokens[at]!.type !== 'link_open' && state.tokens[at]!.type !== 'image') at++;
+  if (at === state.tokens.length) return true;
   const token = state.tokens[at]!, env = state.env as Env, image = token.type === 'image';
   const href = token.attrGet(image ? 'src' : 'href') ?? '';
   if (image ? env.images && imageAllowed(href) : linkAllowed(href)) return true;
