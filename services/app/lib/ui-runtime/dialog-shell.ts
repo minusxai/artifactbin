@@ -1,4 +1,5 @@
 import { onCleanup, onMount } from 'solid-js';
+import { tabWrapTarget } from './dialog-tab';
 
 /**
  * THE MODAL CONTRACT, ONCE — what every app dialog and sheet owns while it is mounted:
@@ -46,11 +47,11 @@ function onKey(event: KeyboardEvent) {
   if (!root) return;
   const stops = [...root.querySelectorAll<HTMLElement>(top.focusable ?? FOCUSABLE)];
   if (!stops.length) { event.preventDefault(); return; }
-  const first = stops[0]!; const last = stops[stops.length - 1]!;
   const active = (root.getRootNode() as Document | ShadowRoot).activeElement;
-  if (!active || !root.contains(active) || (event.shiftKey ? active === first : active === last)) {
+  const target = tabWrapTarget(stops, active, event.shiftKey, !root.contains(active));
+  if (target) {
     event.preventDefault();
-    (event.shiftKey ? last : first).focus();
+    target.focus();
   }
 }
 

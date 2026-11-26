@@ -26,7 +26,7 @@ import { ReaderDiscussion } from '../document/ReaderDiscussion';
 import type { FramedStory, RegionUi } from '../document/create-framed-story';
 import { createLiveArtifact } from '../editor/create-live-artifact';
 import { createAppAppearance } from '../ui/theme';
-import { createIsPhoneViewport } from '../ui/MobileSheet';
+import { createIsPhoneViewport } from '../ui/phone-viewport';
 import { TrustedUi } from '../components/TrustedUi';
 import type { Panel } from '../components/PageChrome';
 import { DocumentChrome } from '../document/DocumentChrome';

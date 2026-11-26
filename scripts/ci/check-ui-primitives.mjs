@@ -10,9 +10,8 @@
  *    palette, a code editor's theme, a document's own ground). Each entry needs a `reason`, its count must match
  *    exactly (more or fewer is refused), and the same path + rule is never in both files.
  *
- * Scope: all of `services/app/solid`, plus the offline file's Solid chrome (`services/app/lib/offline/*.tsx`),
- * which draws the same bars and dialogs outside the app shell. The reader kit that draws DOCUMENT content
- * (`lib/islands/kit`, `lib/frame-edit`) is not app chrome and stays unscanned.
+ * Scope: app chrome's TSX and CSS under `services/app/solid`, excluding tests. The web entry and
+ * authored document components are outside this boundary.
  *
  *   node scripts/ci/check-ui-primitives.mjs [--root <dir>] [--allowlist <file>] [--exceptions <file>] [--write-baseline]
  *
@@ -34,7 +33,7 @@ const root = path.resolve(option('--root') ?? sourceRoot);
 const allowlistPath = path.resolve(option('--allowlist') ?? path.join(sourceRoot, 'scripts/ci/ui-primitives-allowlist.json'));
 const exceptionsPath = path.resolve(option('--exceptions') ?? path.join(sourceRoot, 'scripts/ci/ui-primitives-exceptions.json'));
 
-const SCOPE = /^services\/app\/solid\/.+\.(tsx|css)$|^services\/app\/lib\/offline\/[^/]+\.tsx$/;
+const SCOPE = /^services\/app\/solid\/.+\.(tsx|css)$/;
 const EXEMPT = /^services\/app\/solid\/test\/|\/__tests__\//;
 const IN_UI = /^services\/app\/solid\/ui\//;
 const PALETTE = 'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose';
@@ -94,7 +93,7 @@ function scan(file, text) {
   return found;
 }
 
-const files = execFileSync('git', ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard', 'services/app/solid', 'services/app/lib/offline'], { encoding: 'utf8' })
+const files = execFileSync('git', ['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard', 'services/app/solid'], { encoding: 'utf8' })
   .split('\0')
   .filter((file) => SCOPE.test(file) && !EXEMPT.test(file))
   .sort();

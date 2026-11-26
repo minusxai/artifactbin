@@ -4,7 +4,7 @@
  * author content (the document page). Children render into a shadow root carrying the app's own
  * sheet, so the document's stylesheet (its preflight, its utilities, its author rules) cannot restyle
  * them; as an overlay the root sits in the top layer so an author sibling cannot paint over it. Its
- * portal is where solid/ui/Popover, Tooltip and MobileSheet mount (lib/islands/trusted-portal).
+ * portal is where solid/ui/Popover, Tooltip and MobileSheet mount (lib/ui-runtime/trusted-portal).
  */
 import { onCleanup, onMount, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
