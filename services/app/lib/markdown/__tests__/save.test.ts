@@ -75,7 +75,9 @@ describe('a saved document reads back as the same document', () => {
     const pick = <T>(list: readonly T[]): T => list[Math.floor(random() * list.length)]!;
     const inline = ['word', 'two words', ' ', '  ', '*', '_', '**', '__', '`', '``', '~', '~~', '[', ']', '(', ')', '!', '#', '\\', '&amp;', '&copy;',
       '&alpha;', '<', '>', '|', ':', '.', '1.', '-', '+', '=', 'https://a.example/p', 'www.b.example', 'README.md', '[x](https://y.example)',
-      '[t](/p "T")', '**bold**', '*em*', '~~del~~', '`code`', '**`c`**', '[`c`](/c)', '\n', '  \n', '\\\n', '<br>', '[^1]', 'snake_case', '$_x'];
+      '[t](/p "T")', '**bold**', '*em*', '~~del~~', '`code`', '**`c`**', '[`c`](/c)', '\n', '  \n', '\\\n', '<br>', '[^1]', 'snake_case', '$_x',
+      '***', '<https://x.example>', '\t', '“q”', '—', 'a.', '.a', '*a', 'a*', '[a]', '](', '![', '<a@b.example>', '&#32;', '&nbsp;', '    ', ':-:', '|---|',
+      '- ', '> ', '# ', '1. ', '```', '~~~', '![i](/p.png)', '![j](https://i.example/j.png "J")'];
     const blockStarts = ['', '', '', '# ', '## ', '> ', '- ', '* ', '1. ', '3) ', '- [ ] ', '- [x] ', '    ', '   '];
     const block = (depth: number): string => {
       const kind = random();
@@ -88,9 +90,9 @@ describe('a saved document reads back as the same document', () => {
       return start + text + nested;
     };
     const failures: Array<{ markdown: string; saved: string }> = [];
-    for (let run = 0; run < 600; run++) {
+    for (let run = 0; run < 1000; run++) {
       const markdown = Array.from({ length: 1 + Math.floor(random() * 4) }, () => block(0)).join(pick(['\n', '\n\n']));
-      const options = { images: random() < 0.5 };
+      const options = { images: random() < 0.5, breaks: random() < 0.8 };
       const { first, saved, again } = readsBack(markdown, options);
       if (!again.eq(first)) failures.push({ markdown, saved });
     }
