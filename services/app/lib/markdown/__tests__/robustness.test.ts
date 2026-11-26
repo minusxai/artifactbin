@@ -1,7 +1,7 @@
 /**
  * Hostile and deep input (the cases from the scoping experiments): the whole display pipeline and saving finish
  * within a generous ceiling, scale linearly, never crash, and lose no word, however deep the nesting. No millisecond
- * asserts: a ceiling seconds wide and a ratio between two sizes.
+ * asserts: a ceiling seconds wide and a ratio between two sizes, bounded far below quadratic.
  */
 import { describe, expect, it } from 'vitest';
 import { NESTING_CAP, parse, plainText, renderHtml } from '../display';
@@ -38,12 +38,13 @@ describe('hostile input', () => {
     expect(performance.now() - start).toBeLessThan(5_000);
   });
   it.each(Object.keys(HOSTILE))('%s: time grows with the input, not with its square', name => {
-    const small = HOSTILE[name]!(FULL[name]! / 4), large = HOSTILE[name]!(FULL[name]!);
+    const small = HOSTILE[name]!(FULL[name]! / 16), large = HOSTILE[name]!(FULL[name]!);
     display(small);
-    // Linear work takes about `growth` times as long; quadratic about its square (16 for most cases).
+    // Linear work takes about `growth` (~16) times as long, quadratic about its square (~256). The bound sits at half
+    // the square: eight times linear, so a loaded machine's noise cannot fail it while quadratic growth still does.
     const growth = large.length / small.length;
     const ratio = time(() => display(large)) / Math.max(time(() => display(small)), 2);
-    expect(ratio).toBeLessThan(growth * 2.5);
+    expect(ratio).toBeLessThan(growth * growth / 2);
   });
 });
 
