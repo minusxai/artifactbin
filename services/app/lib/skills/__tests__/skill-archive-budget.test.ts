@@ -71,9 +71,7 @@ import {archiveFor} from '@/lib/skills';
 // editing commands and controls. The stored example-origin archive is 1,737,825 bytes.
 // 1.660 MiB includes the editor’s readable parser for paragraph-separated table rows.
 // 1.663 MiB includes the shared source view and its controls (1,742,581 bytes stored).
-// 1.664 MiB: af-markdown's readable contract states its rules (line breaks, links, images, refusals shown as typed)
-// and the shared stylesheet gains its tight-list and image rules, leaving 1,743,727 bytes, 54 under 1.663.
-const SKILL_ARCHIVE_MAX_BYTES=1.664*1024*1024;
+const SKILL_ARCHIVE_MAX_BYTES=1.663*1024*1024;
 
 describe('the downloadable author skill archive',()=>{
  it('fits its size budget',async()=>{
