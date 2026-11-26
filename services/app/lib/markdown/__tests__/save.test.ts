@@ -36,7 +36,7 @@ describe('no-edit identity: canonical text saves byte for byte', () => {
     '```ts\nconst a = 1;\n```',
     'above\n\n---\n\nbelow',
     'line one\nline two\n\\\nafter two breaks',
-    '| a | b | c |\n| :-- | --: | :-: |\n| 1 | `x\\|y` | 2<br>3 |',
+    '| a | b | c |\n| :--- | ---: | :---: |\n| 1 | `x\\|y` | 2<br>3 |',
     '\\# not a heading, \\*not italic\\* and 5 * 3 = snake_case',
     'Text[^1].\n\n[^1]: the note stays text',
     'See https://a.example/x and www.example.com.',
@@ -48,6 +48,10 @@ describe('no-edit identity: canonical text saves byte for byte', () => {
   it.each(canonical)('%j', markdown => { expect(save(markdown)).toBe(markdown); });
   it('keeps images, ref: uploads and their titles', () => {
     for (const markdown of ['![alt](https://i.example/p.png)', '![a](ref:abc123 "T") and ![b](/raw/p.png)']) expect(save(markdown, { images: true })).toBe(markdown);
+  });
+  it('writes nothing for an empty paragraph after the last block, not even its line break', () => {
+    const { doc: root, horizontalRule, paragraph } = schemas.plain.nodes;
+    expect(serialize(root!.create(null, [horizontalRule!.create(), paragraph!.create()]))).toBe('---');
   });
   it('writes backslash breaks when breaks is off', () => {
     expect(save('one\\\ntwo', { breaks: false })).toBe('one\\\ntwo');

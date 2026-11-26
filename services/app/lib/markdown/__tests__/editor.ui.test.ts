@@ -3,11 +3,11 @@
  * with only EDITOR_ONLY_MARKUP removed; mounting and focusing changes nothing; documents built with commands save
  * and read back unchanged; task items toggle; images take an asynchronous address. One editor serves the samples.
  */
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Editor, type JSONContent } from '@tiptap/core';
 import { Fragment } from 'prosemirror-model';
 import { renderHtml, type MarkdownDoc } from '../display';
-import { EDITOR_ONLY_MARKUP, markdownExtensions, markdownSchema, parse, serialize } from '../editor';
+import { EDITOR_ONLY_MARKUP, loadCodeHighlighting, markdownExtensions, markdownSchema, parse, serialize } from '../editor';
 import { MARK_ORDER } from '../types';
 import { SAMPLES } from './samples';
 
@@ -17,6 +17,8 @@ const options = { images: true, classifyLink, imageAddress };
 const extensions = () => markdownExtensions(options);
 const editor = new Editor({ element: document.createElement('div'), extensions: extensions() });
 afterAll(() => editor.destroy());
+// The highlighter is a lazy chunk (highlight-lazy.ui.test.ts); these comparisons start with it loaded.
+beforeAll(() => loadCodeHighlighting());
 
 const VOID = new Set(['BR', 'HR', 'IMG']);
 const escape = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/ /g, '&nbsp;');
@@ -104,6 +106,13 @@ describe('documents built with commands', () => {
     expect(markdownSchema({ images: true }).nodeFromJSON(parse(saved, { images: true })).toJSON(), saved).toEqual(doc.toJSON());
     return saved;
   };
+  const row = (type: string) => ({ type: 'tableRow', content: [{ type }, { type }] });
+  /** Put the caret in the table's `index`th cell, counting across rows. */
+  const toCell = (index: number): Step => e => {
+    let seen = -1, at = -1;
+    e.state.doc.descendants((node, pos) => { if (/^table(Cell|Header)$/.test(node.type.name) && ++seen === index) at = pos + 1; });
+    return e.commands.setTextSelection(at);
+  };
   const text = (value: string, marks: string[] = []) => ({ type: 'text', text: value, ...(marks.length ? { marks: marks.map(type => ({ type })) } : {}) });
 
   it('save and read back as the same document', () => {
@@ -126,9 +135,9 @@ describe('documents built with commands', () => {
       e => e.commands.splitBlock(), e => e.commands.lift('blockquote'),
       e => e.commands.setCodeBlock({ language: 'ts' }), e => e.commands.insertContent('const fence = "```";'), e => e.commands.exitCode(),
       e => e.commands.insertContent([text('a '), { type: 'text', text: 'link', marks: [{ type: 'link', attrs: { href: 'https://l.example', title: 'Title' } }] }, text(' and '), { type: 'image', attrs: { src: 'ref:abc123', alt: 'upload [1]', title: null } }]),
-      e => e.commands.insertTable({ rows: 2, cols: 2, withHeaderRow: true }),
-      e => e.commands.insertContent('a | b'), e => e.commands.goToNextCell(), e => e.commands.insertContent('x'),
-      e => e.commands.goToNextCell(), e => e.commands.insertContent('1'), e => e.commands.insertContent({ type: 'hardBreak' }), e => e.commands.insertContent('2'),
+      e => e.commands.insertContent({ type: 'table', content: [row('tableHeader'), row('tableCell')] }),
+      toCell(0), e => e.commands.insertContent('a | b'), toCell(1), e => e.commands.insertContent('x'),
+      toCell(2), e => e.commands.insertContent('1'), e => e.commands.insertContent({ type: 'hardBreak' }), e => e.commands.insertContent('2'),
     ]);
     const saved = readsBack(doc);
     expect(saved).toContain('```ts\nconst fence = "```";\n```');
