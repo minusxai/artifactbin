@@ -19,7 +19,8 @@
  * Task lists split from bullet groups and nested lists keep their structure, as the shared parse reads them.
  */
 import type { JSONContent } from '@tiptap/core';
-import { parse, type MarkdownMark, type MarkdownNode } from '../markdown/display';
+import type { MarkdownMark, MarkdownNode } from '../markdown/display';
+import { parse } from '../markdown/parse';
 import { safeHref } from './href';
 
 const LINK_TITLE_MAX = 512;

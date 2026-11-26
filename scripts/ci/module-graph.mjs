@@ -176,7 +176,7 @@ const BUNDLED_LEAVES = {
   ],
   'lib/local-connection': ['browser'],
   // `editing` is the editing behaviour the Markdown field and the document editor share (list indent, clipboard).
-  'lib/markdown': ['code-block', 'display', 'editing', 'editor'],
+  'lib/markdown': ['code-block', 'display', 'editing', 'editor', 'href', 'parse', 'save'],
   'lib/skills': ['agent-discovery', 'setup-instructions'],
   'lib/html-systems': ['story-systems', 'story-themes', ],
   'lib/workspace': ['artifact-starters', 'breadcrumb', 'visibility-icons'],

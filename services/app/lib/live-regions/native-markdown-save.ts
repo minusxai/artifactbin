@@ -12,7 +12,7 @@
  */
 import type { Node as PMNode, Schema } from 'prosemirror-model';
 import type { MarkdownMark, MarkdownNode, MarkName } from '../markdown/display';
-import { markdownSchema, serialize } from '../markdown/editor';
+import { markdownSchema, serialize } from '../markdown/save';
 import { LiveRegionRefusal } from './refusal';
 
 const ATTRIBUTES: Record<string, readonly string[]> = { heading: ['level'], orderedList: ['start'], codeBlock: ['language'], taskItem: ['checked'], image: ['src', 'alt', 'title'] };

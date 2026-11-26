@@ -12,7 +12,7 @@
 import { parseFragment, type DefaultTreeAdapterMap } from 'parse5';
 import type { JSONContent } from '@tiptap/core';
 import type { Mark, Node as PMNode } from 'prosemirror-model';
-import { imageAllowed } from '../markdown/display';
+import { imageAllowed } from '../markdown/href';
 import { nativeSchema } from './native-schema';
 import { LiveRegionRefusal } from './refusal';
 import { safeHref, isNodeId } from './schema';

@@ -5,7 +5,7 @@ import type { Node as PMNode } from 'prosemirror-model';
 import { REGION_TEXT_MAX_UNITS } from '@artifactbin/contracts/region-sessions';
 import { Fragment } from 'prosemirror-model';
 import { nativeSchema, NATIVE_ROOT } from './native-schema';
-import { imageAllowed } from '../markdown/display';
+import { imageAllowed } from '../markdown/href';
 import { IMAGE_TITLE_MAX, readNativeHtml, writeNativeHtml, type NativeHtmlReadOptions, type NativeImage } from './native-html';
 import { openRegionDoc, forkRegionDoc } from './region-doc';
 import { LiveRegionRefusal } from './refusal';
