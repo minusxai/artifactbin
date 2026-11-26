@@ -1,23 +1,39 @@
 /** Re-read the current document admission after a stream gap. Only a definitive refusal clears the viewer's
- * projection. Navigation or a newer read supersedes an outstanding answer. */
+ * projection. A stream reports an error and its reconnect back to back: a request while a read is outstanding is
+ * coalesced into one more read after it (never an abort, which every check reports as a failed request), and only
+ * the latest read's answer is applied. Navigation aborts an outstanding read. */
 import { onCleanup } from 'solid-js';
 import type { DocumentAnswer } from '../pages/Document';
 
 export function documentAdmissionReader<T>(win: Window, id: string, apply: (page: T | null) => void): () => Promise<void> {
-  let read: AbortController | undefined;
-  onCleanup(() => read?.abort());
-  return async () => {
-    read?.abort();
-    read = new AbortController();
-    const { signal } = read;
-    let page: T | null;
+  const disposed = new AbortController();
+  onCleanup(() => disposed.abort());
+  let running: Promise<void> | undefined;
+  let again = false;
+  const readOnce = async (): Promise<{ page: T | null } | undefined> => {
     try {
-      const response = await win.fetch(`/api/page/artifact/${encodeURIComponent(id)}`, { credentials: 'same-origin', cache: 'no-store', signal });
-      if (response.ok) page = await response.json() as T;
-      else if (response.status === 404) page = null;
-      else return;
-    } catch { return; }
-    if (!signal.aborted) apply(page);
+      const response = await win.fetch(`/api/page/artifact/${encodeURIComponent(id)}`, { credentials: 'same-origin', cache: 'no-store', signal: disposed.signal });
+      if (response.ok) return { page: await response.json() as T };
+      if (response.status === 404) return { page: null };
+    } catch { /* unreachable or aborted: keep the current projection */ }
+    return undefined;
+  };
+  const run = async () => {
+    try {
+      do {
+        again = false;
+        const answer = await readOnce();
+        if (disposed.signal.aborted) return;
+        // A newer request arrived while this read was outstanding: its answer may be stale, so read once more.
+        if (!again && answer) apply(answer.page);
+      } while (again);
+    } finally { running = undefined; }
+  };
+  return () => {
+    if (disposed.signal.aborted) return Promise.resolve();
+    if (running) { again = true; return running; }
+    running = run();
+    return running;
   };
 }
 
