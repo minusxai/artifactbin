@@ -1,7 +1,8 @@
 /**
  * THE EDITOR'S DOCUMENT → MARKDOWN, on prosemirror-markdown's MarkdownSerializer for blocks, with our own inline
  * writer. The aim is that `parse(serialize(doc))` is the same document, and that canonical text comes back byte for
- * byte (`- ` bullets, `1.` numbers, `**`/`*`/`~~`, fenced code, `---`, `| --- |` delimiter rows).
+ * byte (`- ` bullets, `1.` numbers, `**`/`*`/`~~`, fenced code, `---`, `| --- |` delimiter rows, aligned ones as
+ * `:---`, `---:` and `:---:`, the spelling af-markdown-editor has always saved).
  *
  * - Escaping is minimal and contextual: a character is escaped only where it would start markup there (line-start
  *   markers after a break, `]` before `(`/`[`, emphasis characters at a run's edge, a decodable `&...;`, an
@@ -395,7 +396,7 @@ const serializer = new MarkdownSerializer({
     });
     const width = Math.max(1, ...rows.map(cells => cells.length));
     const line = (cells: string[]) => `| ${Array.from({ length: width }, (_, i) => cells[i] ?? '').join(' | ')} |`;
-    const rule = `| ${Array.from({ length: width }, (_, i) => ({ left: ':--', center: ':-:', right: '--:' } as Record<string, string>)[aligns[i] ?? ''] ?? '---').join(' | ')} |`;
+    const rule = `| ${Array.from({ length: width }, (_, i) => ({ left: ':---', center: ':---:', right: '---:' } as Record<string, string>)[aligns[i] ?? ''] ?? '---').join(' | ')} |`;
     [line(rows[0] ?? []), rule, ...rows.slice(1).map(line)].forEach((text, i) => { if (i) state.ensureNewLine(); state.write(text); });
     state.closeBlock(node);
   },

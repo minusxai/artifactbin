@@ -36,7 +36,7 @@ describe('no-edit identity: canonical text saves byte for byte', () => {
     '```ts\nconst a = 1;\n```',
     'above\n\n---\n\nbelow',
     'line one\nline two\n\\\nafter two breaks',
-    '| a | b | c |\n| :-- | --: | :-: |\n| 1 | `x\\|y` | 2<br>3 |',
+    '| a | b | c |\n| :--- | ---: | :---: |\n| 1 | `x\\|y` | 2<br>3 |',
     '\\# not a heading, \\*not italic\\* and 5 * 3 = snake_case',
     'Text[^1].\n\n[^1]: the note stays text',
     'See https://a.example/x and www.example.com.',
