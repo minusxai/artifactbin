@@ -102,7 +102,7 @@ export function compactRegion(input: RegionCompactionInput): RegionCompaction {
     const merged = clean(nativeDocument(doc));
     const spliced = applyEdits(input.savedHtml, [{start:region.start,end:region.end,text:writeNativeHtml(merged)}]);
     const page = canonicalizeHtmlPage(spliced,{previousHtml:input.savedHtml,ledger:input.ledger});
-    const saved = readNativeHtml(locateRegion(page.html,input.regionId).inner);
+    const saved = readNativeHtml(locateRegion(page.html,input.regionId).inner, { images: true });
     const update = nativeIds(doc,saved);
     return {html:page.html,ledger:page.ledger,update,snapshot:encodeSnapshot(doc)};
   }

@@ -4,10 +4,15 @@
  * Absent target/rel stay absent; browser-created links retain Tiptap's safe new-window defaults.
  * Whitespace-only text between blocks (hand-written HTML's newlines and indentation) is not content: it is dropped
  * at the top level as inside every non-textblock node; any other text outside a block still refuses.
+ *
+ * Images (`<img src alt [title]>`, src as lib/markdown's imageAllowed: https, relative or an upload `ref:<id>`) are
+ * read only where the caller asks (`images`): a reader of stored content reads them all; a revision reads only the
+ * ones its base already holds; everything else refuses `node img`, as before images existed (native-schema.ts).
  */
 import { parseFragment, type DefaultTreeAdapterMap } from 'parse5';
 import type { JSONContent } from '@tiptap/core';
 import type { Mark, Node as PMNode } from 'prosemirror-model';
+import { imageAllowed } from '../markdown/display';
 import { nativeSchema } from './native-schema';
 import { LiveRegionRefusal } from './refusal';
 import { safeHref, isNodeId } from './schema';
@@ -16,18 +21,25 @@ const marks: Record<string,string> = { strong:'bold', b:'bold', em:'italic', i:'
 const refuse = (detail:string):never => { throw new LiveRegionRefusal('unsupported_content',[detail]); };
 type HtmlNode = DefaultTreeAdapterMap['childNode'];
 const blocks = (children:JSONContent[]):JSONContent[] => children.filter(child=>!(child.type==='text' && /^\s*$/.test(child.text??'')));
-export function readNativeHtml(html:string):PMNode {
+export interface NativeImage { src:string; alt:string; title:string|null }
+export interface NativeHtmlReadOptions {
+  /** Which images to read: none by default; `true` every allowed one; a function the ones it accepts. */
+  images?: boolean | ((image:NativeImage)=>boolean);
+}
+export const IMAGE_TITLE_MAX = 512;
+export function readNativeHtml(html:string,options:NativeHtmlReadOptions={}):PMNode {
   const walk = (nodes:HtmlNode[], inherited:NonNullable<JSONContent['marks']> = [], code=false):JSONContent[] => nodes.flatMap(node => {
     if(node.nodeName==='#text') { const text=(node as DefaultTreeAdapterMap['textNode']).value;return text ? [{type:'text',text,marks:inherited}] : []; }
     if(!('tagName' in node)) return refuse('non-element native content');
     const attrs=Object.fromEntries(node.attrs.map(a=>[a.name,a.value]));
-    const allowed=new Set(['data-af-id',...(node.tagName==='a'?['href','rel','target','title']:node.tagName==='ol'?['start']:node.tagName==='ul'?['data-type']:node.tagName==='li'?['data-type','data-checked','role','aria-checked','aria-disabled']:node.tagName==='code'?['class']:[])]);
+    const allowed=new Set(['data-af-id',...(node.tagName==='a'?['href','rel','target','title']:node.tagName==='ol'?['start']:node.tagName==='ul'?['data-type']:node.tagName==='li'?['data-type','data-checked','role','aria-checked','aria-disabled']:node.tagName==='code'?['class']:node.tagName==='img'&&options.images?['src','alt','title']:[])]);
     for(const key of Object.keys(attrs))if(!allowed.has(key))refuse(`attribute ${key}`);
     if(attrs.target && attrs.target!=='_blank')refuse('link target');
     if(attrs.rel && attrs.rel!=='noopener noreferrer nofollow' && attrs.rel!=='noopener noreferrer')refuse('link rel');
     if(attrs['data-type'] && attrs['data-type']!==(node.tagName==='ul'?'taskList':'taskItem'))refuse('task type');
     if(attrs['data-af-id'] && !isNodeId(attrs['data-af-id'])) refuse('invalid identity');
     if(attrs.class && !(node.tagName==='code' && /^language-[\w+-]+$/.test(attrs.class))) refuse('class');
+    if(node.tagName==='img') return [image(attrs,inherited.length>0)];
     if(node.tagName==='code' && code) return walk(node.childNodes,[],true);
     const mark=marks[node.tagName];
     if(mark) { if(mark==='link' && safeHref(attrs.href??'')!==attrs.href) refuse('unsafe link');return walk(node.childNodes,[...inherited,{type:mark,attrs:{afId:attrs['data-af-id']??null,...(mark==='link'?{href:attrs.href,title:attrs.title??null,target:attrs.target||null,rel:attrs.rel==='noopener noreferrer'?'noopener noreferrer nofollow':attrs.rel||null,class:null}:{})}}],code); }
@@ -47,6 +59,15 @@ export function readNativeHtml(html:string):PMNode {
     const children=walk(node.childNodes,[],type==='codeBlock');
     return [{type,attrs:own,content:['paragraph','heading','codeBlock'].includes(type)?children:blocks(children)}];
   });
+  const image=(attrs:Record<string,string>,marked:boolean):JSONContent=>{
+    if(!options.images)return refuse('node img');
+    if(marked)refuse('image mark');
+    const read:NativeImage={src:attrs.src??'',alt:attrs.alt??'',title:attrs.title??null};
+    if(!read.src||!imageAllowed(read.src))refuse('image source');
+    if(read.title!==null&&read.title.length>IMAGE_TITLE_MAX)refuse('image title');
+    if(typeof options.images==='function'&&!options.images(read))refuse('node img');
+    return {type:'image',attrs:{afId:attrs['data-af-id']??null,...read}};
+  };
   try {const doc=nativeSchema.nodeFromJSON({type:'doc',content:blocks(walk(parseFragment(html).childNodes))});doc.check();return doc;}catch(error){if(error instanceof LiveRegionRefusal)throw error;return refuse('invalid native structure');}
 }
 const escape=(s:string)=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -59,6 +80,7 @@ export function writeNativeHtml(doc:PMNode):string {
   };
   const render=(node:PMNode):string=>{
     if(node.isText)return escape(node.text!);
+    if(node.type.name==='image')return `<img${identity(node.attrs.afId)} src="${escape(String(node.attrs.src??''))}" alt="${escape(String(node.attrs.alt??''))}"${node.attrs.title!=null?` title="${escape(String(node.attrs.title))}"`:''}>`;
     let inner='';
     const active:Mark[]=[];
     const tagOf=(mark:Mark)=>({bold:'strong',italic:'em',code:'code',link:'a'} as Record<string,string>)[mark.type.name]??refuse('mark');

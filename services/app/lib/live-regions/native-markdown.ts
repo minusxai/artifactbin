@@ -1,46 +1,88 @@
-/** CommonMark input mapped to the native schema, preserving real nested list structure. */
-import { defaultMarkdownParser, defaultMarkdownSerializer, MarkdownSerializer, schema as baseMarkdownSchema } from 'prosemirror-markdown';
-import { Schema, type Node as PMNode } from 'prosemirror-model';
+/**
+ * MARKDOWN INTO A DOCUMENT (native-v1): lib/markdown's one parser (its display entry: no ProseMirror, no Tiptap),
+ * fitted to the native schema. The editor's plain-text paste (the `@afbin/native-markdown` chunk) and agents' Markdown
+ * writes (state.ts applyRegionRevision) both read Markdown here; native-markdown-save.ts writes it back.
+ *
+ * The shared rules apply as everywhere (lib/markdown/display.ts): a single newline is a line break, bare addresses
+ * link only with a scheme or `www.`, raw HTML is text. The fit, for what the document schema cannot hold:
+ * - images are off, so image syntax stays the text it was typed as (documents gain image writers a release after
+ *   readers, native-schema.ts);
+ * - a mark the schema lacks (strikethrough) is dropped and its text kept;
+ * - inline code keeps its text and only the code mark (documents' code mark excludes every other);
+ * - a link the document refuses (live-regions/href.ts safeHref, which has no `tel:`) is dropped and its text kept,
+ *   and a link title is cut to 512 characters, as a pasted one is;
+ * - a table becomes one paragraph per row, its cells joined with ` | ` (tables stay out of documents);
+ * - a code block's language is kept only in the form the document stores (`[-\w+]{1,64}`);
+ * - a list item opens with a paragraph or heading, as the schema requires (an empty one is added before anything
+ *   else, which is what the previous parser did too);
+ * - `tight` list spacing, which documents do not store, is dropped.
+ * Task lists split from bullet groups and nested lists keep their structure, as the shared parse reads them.
+ */
 import type { JSONContent } from '@tiptap/core';
-import { LiveRegionRefusal } from './refusal';
+import { parse, type MarkdownMark, type MarkdownNode } from '../markdown/display';
 import { safeHref } from './href';
-const names:Record<string,string>={code_block:'codeBlock',bullet_list:'bulletList',ordered_list:'orderedList',list_item:'listItem',horizontal_rule:'horizontalRule',hard_break:'hardBreak'};
-export function nativeMarkdownJson(source:string):JSONContent {
- const convert=(node:PMNode):JSONContent=>{
-  if(node.type.name==='image')return {type:'text',text:`![${node.attrs.alt??''}](${node.attrs.src??''})`};
-  const content:JSONContent[]=[];node.forEach(child=>{
-   const converted=convert(child);
-   if(converted.type==='bulletList'&&converted.content?.some(item=>item.type==='taskItem')){
-    let group:JSONContent|undefined;
-    for(const item of converted.content){const type=item.type==='taskItem'?'taskList':'bulletList';if(group?.type!==type){group={type,content:[]};content.push(group);}group.content!.push(item);}
-   }else content.push(converted);
-  });
-  const result:JSONContent = {type:names[node.type.name]??node.type.name,...(node.isText?{text:node.text}:{}),
-   attrs:node.type.name==='ordered_list'?{start:node.attrs.order}:node.type.name==='code_block'?{language:node.attrs.params||null}:node.type.name==='heading'?{level:node.attrs.level}:{},
-   marks:node.marks.filter(mark=>mark.type.name!=='link'||safeHref(mark.attrs.href)===mark.attrs.href).map(mark=>({type:mark.type.name==='strong'?'bold':mark.type.name==='em'?'italic':mark.type.name,...(mark.type.name==='link'?{attrs:{href:mark.attrs.href}}:{})})),
-   ...(content.length?{content}:{}),
-  };
-  if(result.type==='listItem'){
-   const text=content[0]?.content?.[0];const match=text?.type==='text'&&/^\[([ xX])\] /.exec(text.text??'');
-   if(match){result.type='taskItem';result.attrs={checked:match[1]!.toLowerCase()==='x'};text!.text=text!.text!.slice(match[0].length);if(!text!.text)content[0]!.content!.shift();}
-  }
-  if(result.type==='bulletList'&&content.every(child=>child.type==='taskItem'))result.type='taskList';
-  else if(result.type==='orderedList')for(const child of content){if(child.type==='taskItem'){const marker=child.attrs?.checked?'[x] ':'[ ] ';child.type='listItem';child.attrs={};child.content![0]!.content!.unshift({type:'text',text:marker});}}
-  return result;
- };return convert(defaultMarkdownParser.parse(source));
-}
-export function writeNativeMarkdown(doc:PMNode):string {
- // CommonMark cannot express attribute presence or disabled ARIA semantics.
- // HTML reads/revisions and native editor saves remain fully lossless.
- doc.descendants(node=>{if(node.type.name==='listItem'&&node.attrs.legacyChecked!==null)throw new LiveRegionRefusal('unsupported_content',['legacy checkbox requires HTML']);});
- const markdownSchema=new Schema({nodes:baseMarkdownSchema.spec.nodes.update('list_item',{...baseMarkdownSchema.nodes.list_item!.spec,attrs:{checked:{default:null}}}),marks:baseMarkdownSchema.spec.marks});
-const serializer=new MarkdownSerializer({...defaultMarkdownSerializer.nodes,text(state,node,parent,index){const value=node.text!;const spaces=index===0&&parent.type.name!=='code_block'?/^ +/.exec(value)?.[0].length??0:0;if(spaces)state.write('&#32;'.repeat(spaces));state.text(value.slice(spaces));},list_item(state,node){if(typeof node.attrs.checked==='boolean')state.write(node.attrs.checked?'[x] ':'[ ] ');state.renderContent(node);}},defaultMarkdownSerializer.marks);
 
- const reverse=Object.fromEntries(Object.entries(names).map(([a,b])=>[b,a]));
- const convert=(node:PMNode):PMNode=>{
-  if(node.isText)return markdownSchema.text(node.text!,node.marks.map(mark=>markdownSchema.marks[mark.type.name==='bold'?'strong':mark.type.name==='italic'?'em':mark.type.name]!.create(mark.type.name==='link'?{href:mark.attrs.href}:{})));
-  const content:PMNode[]=[];node.forEach(child=>content.push(convert(child)));
-  const name=node.type.name==='taskList'?'bullet_list':node.type.name==='taskItem'?'list_item':reverse[node.type.name]??node.type.name;
-  return markdownSchema.nodes[name]!.create(name==='ordered_list'?{order:node.attrs.start}:name==='code_block'?{params:node.attrs.language??''}:node.type.name==='taskItem'?{checked:node.attrs.checked}:node.attrs,content);
- };return serializer.serialize(convert(doc));
+const LINK_TITLE_MAX = 512;
+const LANGUAGE = /^[-\w+]{1,64}$/;
+const OPENS_ITEM = new Set(['paragraph', 'heading']);
+
+type NativeMark = NonNullable<JSONContent['marks']>[number];
+function fitMarks(marks: readonly MarkdownMark[] = []): NativeMark[] {
+  if (marks.some(mark => mark.type === 'code')) return [{ type: 'code' }];
+  return marks.flatMap((mark): NativeMark[] => {
+    if (mark.type === 'bold' || mark.type === 'italic') return [{ type: mark.type }];
+    if (mark.type !== 'link') return [];
+    const href = mark.attrs?.href ?? '';
+    if (safeHref(href) !== href) return [];
+    const title = mark.attrs?.title;
+    return [{ type: 'link', attrs: { href, title: typeof title === 'string' ? title.slice(0, LINK_TITLE_MAX) : null } }];
+  });
+}
+
+/** Inline content: text with its fitted marks (neighbours whose marks now match joined), and hard breaks. */
+function fitInline(nodes: readonly MarkdownNode[] = []): JSONContent[] {
+  const out: JSONContent[] = [];
+  for (const node of nodes) {
+    if (node.type === 'hardBreak') { out.push({ type: 'hardBreak' }); continue; }
+    if (node.type !== 'text' || !node.text) continue;
+    const marks = fitMarks(node.marks), last = out.at(-1);
+    if (last?.type === 'text' && JSON.stringify(last.marks ?? []) === JSON.stringify(marks)) last.text += node.text;
+    else out.push({ type: 'text', text: node.text, ...(marks.length ? { marks } : {}) });
+  }
+  return out;
+}
+
+const textblock = (type: string, content: JSONContent[], attrs?: Record<string, unknown>): JSONContent =>
+  ({ type, ...(attrs ? { attrs } : {}), ...(content.length ? { content } : {}) });
+
+function fitBlock(node: MarkdownNode): JSONContent[] {
+  const children = node.content ?? [];
+  switch (node.type) {
+    case 'paragraph': return [textblock('paragraph', fitInline(children))];
+    case 'heading': return [textblock('heading', fitInline(children), { level: node.attrs?.level })];
+    case 'blockquote': return [{ type: 'blockquote', content: fitBlocks(children) }];
+    case 'bulletList': case 'taskList': return [{ type: node.type, content: children.flatMap(fitBlock) }];
+    case 'orderedList': return [{ type: 'orderedList', attrs: { start: node.attrs?.start ?? 1 }, content: children.flatMap(fitBlock) }];
+    case 'listItem': case 'taskItem': {
+      const content = fitBlocks(children);
+      if (!OPENS_ITEM.has(content[0]?.type ?? '')) content.unshift({ type: 'paragraph' });
+      return [{ type: node.type, ...(node.type === 'taskItem' ? { attrs: { checked: node.attrs?.checked === true } } : {}), content }];
+    }
+    case 'codeBlock': {
+      const language = node.attrs?.language;
+      return [textblock('codeBlock', children.flatMap(child => (child.text ? [{ type: 'text', text: child.text }] : [])), { language: typeof language === 'string' && LANGUAGE.test(language) ? language : null })];
+    }
+    case 'horizontalRule': return [{ type: 'horizontalRule' }];
+    case 'table': return children.map(row => textblock('paragraph', fitInline((row.content ?? []).flatMap((cell, i) => [...(i ? [{ type: 'text', text: ' | ' }] : []), ...(cell.content ?? [])]))));
+    default: return [];
+  }
+}
+const fitBlocks = (nodes: readonly MarkdownNode[]): JSONContent[] => {
+  const out = nodes.flatMap(fitBlock);
+  return out.length ? out : [{ type: 'paragraph' }];
+};
+
+/** Markdown as a native-v1 document's JSON (`{type: 'doc', content}`), for `nativeSchema.nodeFromJSON`. */
+export function nativeMarkdownJson(source: string): JSONContent {
+  return { type: 'doc', content: fitBlocks(parse(source, { images: false }).content) };
 }

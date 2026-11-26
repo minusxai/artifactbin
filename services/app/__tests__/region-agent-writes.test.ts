@@ -286,7 +286,7 @@ it('a hand-written native region with whitespace between its blocks reads as Mar
  const authored='\n  <p>First <code>x</code></p>\n  <ul>\n    <li><p>One</p></li>\n    <li><p>Two</p></li>\n  </ul>\n  <p>Last</p>\n';
  const row=await createArtifact(null,owner.id,{format:'html',source:nativeHtml(`<article data-af-editable="rich-native-v1">${authored}</article>`),meta:{},visibility:'private'});
  const readBack=await read({person:owner},'_doc','',row.id);
- expect(readBack).toEqual({status:200,body:{regionId:expect.any(String),kind:'rich-native-v1',version:1,markdown:'First `x`\n\n* One\n\n* Two\n\nLast'}});
+ expect(readBack).toEqual({status:200,body:{regionId:expect.any(String),kind:'rich-native-v1',version:1,markdown:'First `x`\n\n- One\n- Two\n\nLast'}});
  const regionId=String(readBack.body.regionId);
  const req=request(`/api/artifacts/${row.id}/regions/${regionId}/open`,{method:'POST',actor:as(owner),origin:'same'});
  expect((await call(req,()=>openRoute(req,params({ id:row.id,regionId })))).status).toBe(200);

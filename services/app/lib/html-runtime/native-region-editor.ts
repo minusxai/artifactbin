@@ -37,6 +37,8 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
  const doc=openRegionDoc(options.state,{kind:'rich-native-v1',clientId});
  const fragment=doc.getXmlFragment(NATIVE_ROOT);
  const previous=root.innerHTML;
+ // The served page's image addresses (lib/document-serving resolves uploads and cached copies), shown by image id.
+ const servedImages=new Map([...root.querySelectorAll('img[data-af-id][src]')].map(img=>[img.getAttribute('data-af-id')!,img.getAttribute('src')!]));
  root.replaceChildren();root.setAttribute(REGION_EDITOR_ATTR,'rich-native-v1');
  let pending:Uint8Array[]=[];let held:Uint8Array[]=[];let timer:ReturnType<typeof setTimeout>|undefined;let destroyed=false;
  let editor: Editor;
@@ -56,7 +58,7 @@ export function mountRegionEditor(options:RegionEditorOptions):RegionEditor {
   Y.applyUpdate(doc,Y.mergeUpdates([...updates]),REMOTE);doc.clientID=clientId;
   if(kept)select(kept);
  };
- editor=new Editor({element:root,extensions:[...nativeExtensions(),NativeIdentityRepair,NativeIndentation,NativeEditorShortcuts,NativeCodePresentation,Collaboration.configure({document:doc,field:NATIVE_ROOT})],
+ editor=new Editor({element:root,extensions:[...nativeExtensions({servedImages}),NativeIdentityRepair,NativeIndentation,NativeEditorShortcuts,NativeCodePresentation,Collaboration.configure({document:doc,field:NATIVE_ROOT})],
   editorProps:{transformPasted:freshClipboard,transformPastedHTML:html=>normalizeChecklist(html,root.ownerDocument),
    handleTextInput(view,from,to,text){const at=view.state.doc.resolve(from);if(text==='/'&&from===to&&at.parent.isTextblock&&!at.parent.type.spec.code&&!at.parent.content.size){const box=view.coordsAtPos(from);post({kind:'region-slash',regionId,x:box.left,y:box.bottom});}return false;},
    handleKeyDown(view,event){

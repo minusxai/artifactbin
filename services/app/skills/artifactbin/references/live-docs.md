@@ -34,12 +34,13 @@ doc's body. Name another with `--region ID` (its `data-af-id`); a refusal lists 
 page has. `text` regions (a title) hold one line of plain text: escape Markdown characters you
 mean literally (`\*`).
 
-Rich regions keep CommonMark headings, paragraphs, bullet and numbered lists (nested), block
-quotes, fenced code blocks, horizontal rules, bold, italic, inline code and links (http, https,
-mailto or relative). Images, tables, hard line breaks and raw HTML are refused by name. Markdown
-has no empty paragraph: blank paragraphs are dropped. `--html` reads and writes the region's
-HTML in the same subset instead (`p`, `h1`-`h6`, `ul`/`ol`/`li`, `blockquote`, `pre>code`, `hr`,
-`strong`, `em`, `code`, `a href`).
+Rich regions keep headings, paragraphs, bullet, numbered and task lists (nested), block quotes,
+fenced code blocks, horizontal rules, line breaks (one newline), bold, italic, inline code and
+links (http, https, mailto or relative; bare `https://` and `www.` addresses link). Strikethrough,
+tables (a paragraph per row), images and raw HTML stay text. Markdown has no empty paragraph:
+blank paragraphs are dropped. `--html` reads and writes the region's HTML in the same subset
+instead (`p`, `h1`-`h6`, `ul`/`ol`/`li`, `blockquote`, `pre>code`, `hr`, `br`, `strong`, `em`,
+`code`, `a href`). A region holding an image takes only `--html` writes.
 
 Docs and `af-markdown` share one Markdown stylesheet (`components/markdown-styles.ts`, root class
 `af-markdown-body`); the design

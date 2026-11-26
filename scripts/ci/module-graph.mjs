@@ -256,10 +256,7 @@ export const PACKAGE_OWNERS = {
   },
   'prosemirror-markdown': {
     owner: 'lib/markdown',
-    importers: [
-      'services/app/lib/live-regions/markdown.ts', 'services/app/lib/live-regions/native-markdown.ts',
-      'services/app/lib/live-regions/source-html.ts',
-    ],
+    importers: ['services/app/lib/live-regions/markdown.ts', 'services/app/lib/live-regions/source-html.ts'],
   },
 };
 /** A lib module without a row: entered only through its index (rule 4's default). */

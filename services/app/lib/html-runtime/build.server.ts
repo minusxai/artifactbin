@@ -30,6 +30,9 @@ const bundled=async(extra:Parameters<typeof build>[0],empty='HTML runtime build 
 const esm=(file:URL,extra:Parameters<typeof build>[0]={})=>bundled({entryPoints:[fileURLToPath(file)],format:'esm',...extra});
 /** Resolve the bare `filter` import as the external `path`: a module the page's import map supplies. */
 const external=(name:string,filter:RegExp,path:string):Plugin=>({name,setup(builder:PluginBuild){builder.onResolve({filter},()=>({path,external:true}));}});
+/** markdown-it's `entities` import as lib/markdown's slim decoder: the redirect scripts/lib/slim-entities.mjs gives every
+ * other build of that module (a library cannot import the scripts layer), proved by build.test.ts. */
+const slimEntities:Plugin={name:'slim-entities',setup(builder){builder.onResolve({filter:/^entities$/},({importer})=>/[\\/]node_modules[\\/]markdown-it[\\/]/.test(importer)?{path:fileURLToPath(new URL('../markdown/entities.ts',import.meta.url))}:undefined);}};
 async function compile():Promise<HtmlRuntimeAssets>{
  const readerSource=await esm(new URL('./browser-reader.ts',import.meta.url),{external:['@afbin/chrome','@afbin/portable','@afbin/morph'],banner:{js:`const __AF_RUNTIME_CONFIG__=(()=>{const supplied=document.querySelector('[data-af="runtime"]');return supplied?JSON.parse(supplied.textContent):{pageId:'local:'+location.pathname,revision:'local',backends:[],offline:true};})();`}});
  // `@afbin/state` owns the page's one local-state document; `@afbin/apollo` imports it rather than carrying a second copy.
@@ -52,7 +55,8 @@ async function compile():Promise<HtmlRuntimeAssets>{
   }));},
  }];
  // Live dataset text cells (./collab: Yjs, no ProseMirror) load only when a page imports `@afbin/collab`; the frame's cell port is the reader's.
- const nativeMarkdown=await esm(new URL('./native-region-markdown.ts',import.meta.url));
+ // The paste parser (lib/markdown's display parse, fitted to the document schema), with lib/markdown's slim entity decoder.
+ const nativeMarkdown=await esm(new URL('./native-region-markdown.ts',import.meta.url),{plugins:[slimEntities]});
  const nativeRegions=await esm(new URL('./native-region-editor.ts',import.meta.url),{conditions:['production'],define:{'process.env.NODE_ENV':'"production"'},plugins:regionPlugins});
  const collab=await esm(new URL('./collab.ts',import.meta.url),{plugins:[sharedReader]});
  // The `sql` engine (./offline-sql): embedded in a downloaded copy that carries its reader's rows, and served once at
