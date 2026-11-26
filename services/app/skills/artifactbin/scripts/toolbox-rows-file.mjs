@@ -1,12 +1,14 @@
 /**
- * Internal: sql.mjs query --sql-file and --output. statementOf reads the SQL from a file instead of
- * the command line; outputRequest checks --output before any query (reads only; a new .csv or
- * .json file); writeRows writes every row of the read there exclusively and answers a summary in
- * place of the rows: their count, the columns and a few rows with long values cut, so the rows
- * reach the file without passing through the caller. Used by: sql.mjs.
+ * Internal: sql.mjs query --sql-file, --limit and --output. statementOf reads the SQL from a file
+ * instead of the command line; readLimit checks --limit (a printed read at most 10,000 rows, a
+ * default:DB read saved with --output at most 100,000); outputRequest checks --output before any
+ * query (reads only; a new .csv or .json file); writeRows writes every row of the read there
+ * exclusively and answers a summary in place of the rows: their count, the columns and a few rows
+ * with long values cut, so the rows reach the file without passing through the caller.
+ * Used by: sql.mjs.
  */
 import {lstat, readFile} from 'node:fs/promises';
-import {ToolError, exclusive, safeParent} from './toolbox-client.mjs';
+import {ToolError, exclusive, integer, safeParent} from './toolbox-client.mjs';
 
 const SAMPLE = 5, CELL = 60;
 const fail = (code, message, exit, recovery) => new ToolError(code, message, exit, recovery);
@@ -22,6 +24,19 @@ export async function statementOf(values, sub, positional) {
   if (!sql.trim()) throw fail('invalid_sql_file', '--sql-file is empty.', 2,
     'Write one SQL statement into the file.');
   return sql;
+}
+
+/** Rows a read returns by default, printed at most, and saved from default:DB with --output. */
+export const ROWS = Object.freeze({default: 1000, printed: 10000, saved: 100000});
+/** The checked --limit and the most this read may ask for. */
+export function readLimit(value, saved, target) {
+  const most = saved && target.startsWith('default:') ? ROWS.saved : ROWS.printed;
+  const limit = value === undefined ? ROWS.default : integer(value, 'limit', 1,
+    most === ROWS.saved ? most : Infinity);
+  if (limit > most) throw fail('limit_too_large', `This read returns at most ${most} rows.`, 2,
+    saved ? `Only a default:DB read saves up to ${ROWS.saved} rows with --output.` :
+      `Add --output FILE.csv to save up to ${ROWS.saved} rows of a default:DB read.`);
+  return {limit, most};
 }
 
 /** The checked --output request, or null without one. */

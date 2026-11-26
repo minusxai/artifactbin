@@ -12,7 +12,8 @@ Flags: --sql-file FILE reads the statement from FILE instead; --output FILE save
   of a read into a new .csv or .json file and prints {columns, rowCount, sample, output} (a few
   rows, long values cut) in place of the rows: put rows in files this way, never by retyping
   them. --params FILE a JSON object of the $name values the SQL binds; --limit N the most rows a
-  read returns (integer 1–10000, default 1000, including default:DB reads);
+  read returns (default 1000; printed at most 10000; a default:DB read with --output saves up to
+  100000: aggregate in SQL first, then save the rows you still need to a file and analyse it there);
   --revision N a saved page revision (default: current; pages only; it reads only);
   --idempotency-key KEY replays a page write (default: a new key, printed as idempotencyKey);
   --chart FILE a chart description (the JSON <af-chart>
@@ -21,7 +22,7 @@ Flags: --sql-file FILE reads the statement from FILE instead; --output FILE save
 Examples:
   node scripts/sql.mjs schema ID
   node scripts/sql.mjs query ID 'select grp, count(*) as n from entries group by grp'
-  node scripts/sql.mjs query default:DB --sql-file monthly.sql --output outputs/monthly.csv
+  node scripts/sql.mjs query default:DB --sql-file daily.sql --limit 100000 --output daily.csv
   node scripts/sql.mjs query ID 'update entries set note = $note where _id = $id' --params p.json
 Gotchas: quote the SQL in single quotes, so the shell leaves $name alone. schema prints one
   CREATE TABLE per table, columns and types as your role sees them (hidden columns are absent).
@@ -52,10 +53,10 @@ import {
 } from './toolbox-client.mjs';
 import {datasetLinks} from './toolbox-check-reply.mjs';
 import {chartRequest, drawChart} from './toolbox-chart.mjs';
-import {outputRequest, statementOf, writeRows} from './toolbox-rows-file.mjs';
+import {outputRequest, readLimit, statementOf, writeRows} from './toolbox-rows-file.mjs';
 
 const WRITE = /^\s*(?:insert|update|delete)\b/i;
-const ROWS = {default: 1000, max: 10000}, PAGE = 100;
+const PAGE = 100;
 // Transport only; server execution maxima are page 120s, warehouse 900s.
 const READ = {safeToRepeat: true, timeoutMs: 140000}, WAREHOUSE_MS = 920000;
 const TYPES = {number: 'REAL', boolean: 'BOOLEAN', string: 'TEXT', date: 'DATE',
@@ -99,15 +100,14 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
       'query takes an ID and one SQL statement.', 2, 'Read --help.');
   const chart = await chartRequest(values, sub, WRITE.test(statement ?? ''));
   const saved = await outputRequest(values, sub, WRITE.test(statement ?? ''));
-  const limit = values.limit === undefined ? ROWS.default :
-    integer(values.limit, 'limit', 1, ROWS.max);
+  const {limit, most} = readLimit(values.limit, saved, target);
   /** The read, its chart when --chart asks for one, and its rows in a file for --output; a cut
    * read also warns once on stderr, the result unchanged. */
   const drawn = async (client, read) => {
     const done = chart ? {...read, chart: await drawChart(client, chart, read)} : read;
     const shown = saved ? await writeRows(saved, done) : done;
     if (read.truncated) process.stderr.write(`warning: result cut at ${read.rows?.length ?? 0}` +
-      ` rows (limit ${limit}; the most is ${ROWS.max}): aggregate in SQL or narrow the query.\n`);
+      ` rows (limit ${limit}; the most is ${most}): aggregate in SQL or narrow the query.\n`);
     return shown;
   };
   if (target.startsWith('default:')) {
@@ -115,6 +115,7 @@ export async function sqlCommand({sub, values, positionals}, options = {}) {
     return drawn(client, await client.request('/api/default-connection/sql', {method: 'POST',
       safeToRepeat: true, timeoutMs: WAREHOUSE_MS, body: {sql: statement,
         namespace: target.slice(8), limit: sub === 'query' ? limit : undefined,
+        output: saved ? 'file' : undefined,
         params: values.params && await jsonFile(values.params)}}));
   }
   const {server, id} = resolveTarget(target, selectedServer(values, options.env)),

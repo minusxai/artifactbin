@@ -10,7 +10,7 @@
  * A QUERY is the database's own SQL dialect, passed through, with NAMED bound parameters (`$name` in the text,
  * the value in `params`; never spliced into the text): one statement, run read-only, on exactly one connection.
  * The answer is columns in a small common type set and rows of JSON values, within `CONNECTOR_LIMITS` (rows, bytes,
- * time); past the row limit the rows stop and `truncated` is set. A failure is one shape, `ConnectorError`: a code
+ * time; a file read asks up to `CONNECTOR_FILE_LIMITS`); past the row limit the rows stop and `truncated` is set. A failure is one shape, `ConnectorError`: a code
  * from `CONNECTOR_ERROR_CODES` and a one-line message that never carries a secret.
  *
  * THE VIEWER. Every query, `schema()` and `test()` carries the person it runs for (`viewer`) as metadata, apart from the
@@ -141,7 +141,7 @@ export interface ConnectorLimits {
   readonly timeoutMs: number;
 }
 /**
- * The common limits (a query may lower them, never raise them) and the connection bounds: `sqlBytes` and `params`
+ * The common limits (a query asking for none gets these) and the connection bounds: `sqlBytes` and `params`
  * per statement, `connectTimeoutMs` to open a session, at most `poolSize` sessions per connection, each closed after
  * `idleMs` unused.
  */
@@ -157,6 +157,12 @@ export const CONNECTOR_LIMITS = Object.freeze({
   /** Tables and views `schema()` lists, at most. */
   schemaTables: 2000,
 });
+/**
+ * The most `rows` and `bytes` a query may ask for: an agent's read saved to a file (`/api/default-connection/sql`
+ * with `output: 'file'`), for analysis outside any page. Every other caller asks for the common limits or less.
+ * 32 MiB of answer JSON peaks near 90 MB of heap while it is collected and sent.
+ */
+export const CONNECTOR_FILE_LIMITS = Object.freeze({ rows: 100_000, bytes: 32 * 1024 * 1024 });
 
 /**
  * Who a query runs for. A person: `id`, `email` (null for an account without one), `groups` their group IDs, `groupRole`
@@ -174,6 +180,7 @@ export interface ConnectorQuery {
   readonly viewer: ConnectorViewer | null;
   /** What the text after `default:` selects (see `ConnectorSpec.namespace`); absent or empty: the configured default. */
   readonly namespace?: string;
+  /** Absent: CONNECTOR_LIMITS. Rows and bytes may be asked up to CONNECTOR_FILE_LIMITS, time only lowered. */
   readonly limits?: Partial<ConnectorLimits>;
   readonly signal?: AbortSignal;
 }

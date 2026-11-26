@@ -21,12 +21,12 @@
  * reader, or the page's group where an approval holds (lib/query-approvals).
  *
  * AN AGENT reads it at `/api/default-connection/{schema,sql}` as its signed-in account (`agentConnectionSql`), its
- * statement passed through unchanged with an optional namespace.
+ * statement passed through unchanged with an optional namespace; a read it saves to a file may be larger.
  */
 import {readLifetime} from '@/lib/datasets';
 import { SQL_FAILURE_FOR_CONNECTOR, sqlReadFailure, type SqlFailureCode } from '@artifactbin/contracts/sql-failures';
 import { liveSource } from '@artifactbin/contracts/sql-source';
-import { CONNECTORS, type ConnectionSummary, type ConnectorDialect, type ConnectorError, type ConnectorSchema, type ConnectorTestResult, type ConnectorViewer } from '@artifactbin/contracts/connectors';
+import { CONNECTORS, CONNECTOR_FILE_LIMITS, type ConnectionSummary, type ConnectorDialect, type ConnectorError, type ConnectorSchema, type ConnectorTestResult, type ConnectorViewer } from '@artifactbin/contracts/connectors';
 import { SQL_READ_LIMITS, type Scalar } from '@artifactbin/contracts/sql';
 import type { HtmlDeclaredQuery, HtmlDefaultConnectionLink, HtmlPageLink, HtmlPageVersion } from '@artifactbin/contracts/html-page';
 import { ConnectorFailure, checkedNamespace, colonParameters, connectionSummary, connectorError, leadingWords, mapQualifiers, openConnection, parseConnectionConfig, qualifierNames, type OpenConnection } from '@artifactbin/connectors';
@@ -207,7 +207,8 @@ async function scopedTarget(c: NonNullable<ReturnType<typeof selected>>, viewer:
   return { namespace: database + '/' + group.id, viewing_as: label(group), groups: explicit ? [] : groups };
 }
 
-async function run(reader: AccessActor | ConnectorViewer, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal, choice?: ScopeChoice, rows: number = SQL_READ_LIMITS.rows): Promise<ConnectionSqlReply> {
+/** `rows` the most an answer carries; `bytes` its JSON size when the caller asked for more than the common limit. */
+async function run(reader: AccessActor | ConnectorViewer, text: string, params: Readonly<Record<string, Scalar>>, namespace: string | undefined, signal: AbortSignal, choice?: ScopeChoice, rows: number = SQL_READ_LIMITS.rows, bytes?: number): Promise<ConnectionSqlReply> {
   const life=readLifetime(signal);
   let scopedPage = false;
   try {
@@ -218,7 +219,7 @@ async function run(reader: AccessActor | ConnectorViewer, text: string, params: 
     const scope = await life.step(scopedTarget(c, viewer, choice));
     const metadata = choice && scope.viewing_as ? { viewing_as: scope.viewing_as, reader_id: viewer.id } : {};
     try {
-      const answer = await c.connection.query({ text, params, viewer, namespace: scope.namespace, limits: { rows }, signal: life.signal });
+      const answer = await c.connection.query({ text, params, viewer, namespace: scope.namespace, limits: { rows, ...(bytes ? { bytes } : {}) }, signal: life.signal });
       life.check();
       return { status: 200, body: { ...metadata, columns: answer.columns, rows: answer.rows, ...(answer.truncated ? { truncated: true } : {}), source: liveSource() } };
     } catch (e) {
@@ -322,16 +323,23 @@ export async function runDeclaredConnectionQuery(viewer: ConnectorViewer, declar
   return run(viewer, text, { ...sent, ...viewerParams(viewer) }, declared.link.namespace || undefined, signal, choice);
 }
 
-/** An agent's statement, as its signed-in account, passed through; `namespace` (what follows `default:`) the database. */
-export async function agentConnectionSql(actor: AccessActor, raw: { sql?: unknown; params?: unknown; namespace?: unknown; limit?: unknown }, signal: AbortSignal): Promise<ConnectionSqlReply> {
+/**
+ * An agent's statement, as its signed-in account, passed through; `namespace` (what follows `default:`) the database.
+ * `output: 'file'` marks a read the caller saves to a file (`sql.mjs query --output`): it may ask for up to
+ * CONNECTOR_FILE_LIMITS rows and bytes; any other read keeps SQL_READ_LIMITS rows and CONNECTOR_LIMITS bytes. The same
+ * admission, viewer and policy govern both; only the size differs.
+ */
+export async function agentConnectionSql(actor: AccessActor, raw: { sql?: unknown; params?: unknown; namespace?: unknown; limit?: unknown; output?: unknown }, signal: AbortSignal): Promise<ConnectionSqlReply> {
   if (!reader(actor)) return AGENT_SIGN_IN;
   const call = checkedCall(raw);
   if ('status' in call) return call;
   if (raw.namespace !== undefined && typeof raw.namespace !== 'string') return reply('validation_failed', 'namespace is what follows default:, a database name');
+  if (raw.output !== undefined && raw.output !== 'file') return reply('validation_failed', "output is 'file' for a read saved to a file, or absent");
+  const file = raw.output === 'file', most = file ? CONNECTOR_FILE_LIMITS.rows : SQL_READ_LIMITS.rows;
   const limit = raw.limit === undefined ? 1_000 : raw.limit;
-  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > SQL_READ_LIMITS.rows)
-    return reply('validation_failed', `limit must be an integer from 1 to ${SQL_READ_LIMITS.rows}`);
-  return run(actor, call.sql, call.params, raw.namespace || undefined, signal, undefined, limit);
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > most)
+    return reply('validation_failed', `limit must be an integer from 1 to ${most}` + (file ? '' : `; a read saved to a file (output: 'file') may ask for up to ${CONNECTOR_FILE_LIMITS.rows}`));
+  return run(actor, call.sql, call.params, raw.namespace || undefined, signal, undefined, limit, file ? CONNECTOR_FILE_LIMITS.bytes : undefined);
 }
 
 /** The tables and columns a signed-in person can read in `namespace`'s database (absent: the configured one). */
