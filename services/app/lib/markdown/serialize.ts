@@ -405,5 +405,6 @@ const serializer = new MarkdownSerializer({
 /** The document (the editor's ProseMirror doc, on the editor entry's schema) as Markdown. */
 export function serialize(doc: PMNode, options: SerializeOptions = {}): string {
   markers.length = 0;
-  return serializer.serialize(doc, { breaks: options.breaks ?? true } as Parameters<typeof serializer.serialize>[1]);
+  // An empty paragraph the editor leaves after the last block writes nothing, but closes the block before it.
+  return serializer.serialize(doc, { breaks: options.breaks ?? true } as Parameters<typeof serializer.serialize>[1]).replace(/\n+$/, '');
 }

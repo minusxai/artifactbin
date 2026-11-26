@@ -49,6 +49,10 @@ describe('no-edit identity: canonical text saves byte for byte', () => {
   it('keeps images, ref: uploads and their titles', () => {
     for (const markdown of ['![alt](https://i.example/p.png)', '![a](ref:abc123 "T") and ![b](/raw/p.png)']) expect(save(markdown, { images: true })).toBe(markdown);
   });
+  it('writes nothing for an empty paragraph after the last block, not even its line break', () => {
+    const { doc: root, horizontalRule, paragraph } = schemas.plain.nodes;
+    expect(serialize(root!.create(null, [horizontalRule!.create(), paragraph!.create()]))).toBe('---');
+  });
   it('writes backslash breaks when breaks is off', () => {
     expect(save('one\\\ntwo', { breaks: false })).toBe('one\\\ntwo');
   });
