@@ -598,7 +598,7 @@ jobs:
         if: steps.gate-browsers.outputs.browsers != 'chromium'
         with:
           path: ~/browser-debs
-          key: browser-debs-v3-ubuntu-24.04-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+          key: browser-debs-v4-ubuntu-24.04-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       - name: Install selected gate browsers
         env:
           BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
@@ -721,7 +721,7 @@ jobs:
         id: browser-debs
         with:
           path: ~/browser-debs
-          key: browser-debs-v3-ubuntu-24.04-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+          key: browser-debs-v4-ubuntu-24.04-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       - if: steps.browser-chromium.outputs.cache-hit != 'true' || steps.browser-firefox.outputs.cache-hit != 'true' || steps.browser-webkit.outputs.cache-hit != 'true' || steps.browser-debs.outputs.cache-hit != 'true'
         run: |
           node scripts/ci/system-debs.mjs "$HOME/browser-debs" -- npx playwright install-deps chromium firefox webkit

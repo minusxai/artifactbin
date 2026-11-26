@@ -4,6 +4,7 @@
  * module graph and environment, so a file that does either runs in an isolated project instead. Found by reading the
  * files, so a new mock or env write moves its file by itself (vitest.config.ts's api and islands projects, and pr fast's
  * node batch, scripts/lib/node-batch.mjs). A signed-in session is not a mock: the app harness names it (`setSession`,
- * services/app/__tests__/harness.ts) and clears it before every test and after every file.
+ * services/app/__tests__/harness.ts) and clears it before every test and after every file. A file whose test needs a
+ * graph nothing else has touched (a first-load test of a lazily loaded module) says so with an `@isolated` line comment.
  */
-export const LEAKS_PAST_ITS_FILE = /\bvi\.(?:mock|doMock|resetModules|stubEnv)\(|process\.env(?:\.\w+|\[[^\]]+\])\s*(?:=[^=]|\?\?=)|delete process\.env/;
+export const LEAKS_PAST_ITS_FILE = /\bvi\.(?:mock|doMock|resetModules|stubEnv)\(|process\.env(?:\.\w+|\[[^\]]+\])\s*(?:=[^=]|\?\?=)|delete process\.env|^\/\/ @isolated\b/m;

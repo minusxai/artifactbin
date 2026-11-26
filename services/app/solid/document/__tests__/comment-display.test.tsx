@@ -3,8 +3,10 @@
  * COMMENT BODIES THROUGH lib/markdown (../comment-display, ../CommentMarkdown): the display chunk loads on first use
  * (the first test runs before anything has loaded it), mention links become the mention components, images go through
  * the document's asset route, refused links and images and raw HTML show as typed, and tables written in a comment
- * display. This file never preloads the chunk; the rig the other comment tests share does.
+ * display. This file never preloads the chunk; the rig the other comment tests share does, so this file runs in a graph
+ * of its own (an islands worker's shared graph may already hold the chunk).
  */
+// @isolated
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/dom';
 import { render } from '../../__tests__/helpers';
