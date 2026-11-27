@@ -69,6 +69,9 @@ export interface TrustedClaims {
   name?: string; previousHandle?: string; jti: string; exp: number;
 }
 export type TrustedTokenRefusal = 'invalid_token' | 'unknown_issuer' | 'forbidden_origin' | 'replayed_token';
+/** A refused token: the refusal the caller is told, and for the operator's log which check refused it, the issuer once
+ * known and, once the signature holds, how far its times sit from this server's clock. Never a value from the token. */
+export interface TrustedTokenFailure { ok: false; refusal: TrustedTokenRefusal; reason: string; issuer?: string; expiresIn?: number; issuedAgo?: number }
 
 const json = (part: string): Record<string, unknown> | null => {
   try { const value = JSON.parse(Buffer.from(part, 'base64url').toString('utf8')); return value && typeof value === 'object' && !Array.isArray(value) ? value : null; } catch { return null; }
@@ -80,22 +83,31 @@ function validPath(value: unknown): value is string[] {
     value.every(handle => typeof handle === 'string' && isValidHandle(handle)) && new Set(value).size === value.length;
 }
 
-function membershipClaims(payload: Record<string, unknown>): Pick<TrustedClaims,'groups'|'activeGroup'> | null {
-  if (['group','group_name','tenancy_id','parent_groups'].some(field => field in payload)) return null;
+/**
+ * The token's groups, or why they are refused (a short reason for the log, ../parts mountTrustedSignIn: never a value
+ * from the token). A group name that is not a usable label (empty, too long, control characters) carries no name, as
+ * displayName says, rather than refusing the sign-in.
+ */
+function membershipClaims(payload: Record<string, unknown>): Pick<TrustedClaims,'groups'|'activeGroup'> | string {
+  const legacy = ['group','group_name','tenancy_id','parent_groups'].find(field => field in payload);
+  if (legacy) return `legacy_claim:${legacy}`;
   const list = payload.groups;
-  if (!Array.isArray(list) || list.length > 256) return null;
+  if (!Array.isArray(list)) return 'groups_not_a_list';
+  if (list.length > 256) return `too_many_groups:${list.length}`;
   const groups: TrustedGroup[] = [];
   const handles = new Set<string>();
-  for (const entry of list) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+  for (const [index, entry] of list.entries()) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return `group_${index}:not_an_object`;
     const {handle, name, tenancy_id, parent_handles} = entry;
-    if (typeof handle !== 'string' || !isValidHandle(handle) || handles.has(handle) || !plain(tenancy_id,200) ||
-      !validPath(parent_handles) || parent_handles.includes(handle) || (name !== undefined && !displayName(name))) return null;
+    if (typeof handle !== 'string' || !isValidHandle(handle)) return `group_${index}:handle`;
+    if (handles.has(handle)) return `group_${index}:duplicate_handle`;
+    if (!plain(tenancy_id,200)) return `group_${index}:tenancy_id`;
+    if (!validPath(parent_handles) || parent_handles.includes(handle)) return `group_${index}:parent_handles`;
     handles.add(handle);
     groups.push({handle, name:displayName(name), tenancyId:tenancy_id, parentHandles:parent_handles});
   }
   const active = payload.active_group;
-  if (active !== undefined && (typeof active !== 'string' || !handles.has(active))) return null;
+  if (active !== undefined && (typeof active !== 'string' || !handles.has(active))) return 'active_group';
   return {groups, activeGroup: typeof active === 'string' ? active : groups[0]?.handle};
 }
 
@@ -109,34 +121,40 @@ export function createTrustedTokenVerifier(issuers: ReadonlyMap<string, TrustedI
   const prune = (at: number) => { for (const [id, exp] of used) if (exp * 1000 <= at) used.delete(id); };
   return {
     enabled: issuers.size > 0,
-    verify(token: string, origin: string | undefined): {ok: true; claims: TrustedClaims} | {ok: false; refusal: TrustedTokenRefusal} {
+    verify(token: string, origin: string | undefined): {ok: true; claims: TrustedClaims} | TrustedTokenFailure {
       const parts = token.split('.');
-      if (parts.length !== 3 || parts.some(part => !/^[A-Za-z0-9_-]+$/.test(part))) return {ok: false, refusal: 'invalid_token'};
+      if (parts.length !== 3 || parts.some(part => !/^[A-Za-z0-9_-]+$/.test(part))) return {ok: false, refusal: 'invalid_token', reason: 'malformed'};
       const [head, body, signature] = parts as [string, string, string];
       const header = json(head), payload = json(body);
-      if (!header || !payload || header.alg !== 'EdDSA' || 'crit' in header) return {ok: false, refusal: 'invalid_token'};
+      if (!header || !payload || header.alg !== 'EdDSA' || 'crit' in header) return {ok: false, refusal: 'invalid_token', reason: 'header'};
       const issuer = typeof payload.iss === 'string' ? issuers.get(payload.iss) : undefined;
-      if (!issuer) return {ok: false, refusal: 'unknown_issuer'};
+      if (!issuer) return {ok: false, refusal: 'unknown_issuer', reason: 'issuer'};
       const keys = origin && issuer.keysByOrigin.get(origin);
-      if (!keys) return {ok: false, refusal: 'forbidden_origin'};
+      if (!keys) return {ok: false, refusal: 'forbidden_origin', reason: 'origin', issuer: issuer.issuer};
       const message = Buffer.from(`${head}.${body}`), bytes = Buffer.from(signature, 'base64url');
-      if (!keys.some(key => verify(null,message,key,bytes))) return {ok: false, refusal: 'invalid_token'};
+      const issuerName = issuer.issuer;
+      if (!keys.some(key => verify(null,message,key,bytes))) return {ok: false, refusal: 'invalid_token', reason: 'signature', issuer: issuerName};
       const at = now(), seconds = at / 1000;
       const {aud, exp, iat, jti, sub} = payload;
       const audienceOk = aud === issuer.audience || (Array.isArray(aud) && aud.length === 1 && aud[0] === issuer.audience);
-      if (!audienceOk || typeof exp !== 'number' || typeof iat !== 'number' || !Number.isFinite(exp) || !Number.isFinite(iat)
-        || exp <= seconds || iat > seconds + CLOCK_SKEW_S || exp <= iat || exp - iat > MAX_LIFETIME_S
-        || !plain(jti, 200) || !plain(sub, 254)) return {ok: false, refusal: 'invalid_token'};
+      const timed = typeof exp === 'number' && typeof iat === 'number' && Number.isFinite(exp) && Number.isFinite(iat);
+      // How far the token's times sit from this server's clock: what tells an expired token from a skewed clock.
+      const times = timed ? {expiresIn: Math.round(exp - seconds), issuedAgo: Math.round(seconds - iat)} : {};
+      const claimFault = !audienceOk ? 'audience' : !timed ? 'times' : exp <= seconds ? 'expired' : iat > seconds + CLOCK_SKEW_S ? 'issued_in_future'
+        : exp <= iat || exp - iat > MAX_LIFETIME_S ? 'lifetime' : !plain(jti, 200) ? 'jti' : !plain(sub, 254) ? 'sub' : null;
+      if (claimFault) return {ok: false, refusal: 'invalid_token', reason: claimFault, issuer: issuerName, ...times};
+      // Every check above held: plain() proved jti and sub strings, `timed` the two numbers.
+      const subject = sub as string, expires = exp as number;
       const previousHandle = payload.previous_handle;
-      if (previousHandle !== undefined && (typeof previousHandle !== 'string' || !isValidHandle(previousHandle) || !sub.includes('@')))
-        return {ok:false, refusal:'invalid_token'};
+      if (previousHandle !== undefined && (typeof previousHandle !== 'string' || !isValidHandle(previousHandle) || !subject.includes('@')))
+        return {ok:false, refusal:'invalid_token', reason:'previous_handle', issuer: issuerName};
       const membership = membershipClaims(payload);
-      if (!membership) return {ok:false,refusal:'invalid_token'};
+      if (typeof membership === 'string') return {ok:false, refusal:'invalid_token', reason:membership, issuer: issuerName, ...times};
       prune(at);
       const key = `${issuer.issuer}\u0000${jti}`;
-      if (used.has(key)) return {ok: false, refusal: 'replayed_token'};
-      used.set(key, exp);
-      return {ok: true, claims: {issuer, subject:sub, ...membership, previousHandle, jti, exp, name:displayName(payload.name)}};
+      if (used.has(key)) return {ok: false, refusal: 'replayed_token', reason: 'replayed', issuer: issuerName, ...times};
+      used.set(key, expires);
+      return {ok: true, claims: {issuer, subject, ...membership, previousHandle, jti: jti as string, exp: expires, name:displayName(payload.name)}};
     },
   };
 }

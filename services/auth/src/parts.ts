@@ -218,11 +218,17 @@ function mountTrustedSignIn(a:AuthApp,o:AuthOptions):void {
     if(!/^application\/x-www-form-urlencoded(?:;|$)/i.test(c.req.header('content-type')??''))return refuse('unsupported_media_type',415);
     const form=new URLSearchParams(await c.req.text());
     const checked=verifier.verify(form.get('token')??'',c.req.header('origin'));
-    if(!checked.ok)return refuse(checked.refusal,checked.refusal==='forbidden_origin'?403:401);
+    if(!checked.ok){
+      // Which check refused the token (./identity/trusted-issuers TrustedTokenFailure): the caller sees only the refusal.
+      const {ok:_ok,...refused}=checked;
+      console.warn(`[identity] trusted sign-in refused ${JSON.stringify(refused)}`);
+      return refuse(checked.refusal,checked.refusal==='forbidden_origin'?403:401);
+    }
     const {issuer,...claims}=checked.claims;
     const result=await trustedSignIn(o.identityTransactions,{...claims,issuer:issuer.issuer,joinCompanyRoot,
       parentGroup:issuer.parentGroup,email:trustedEmailOf(issuer.issuer,claims.subject)},schema,o.appSchema??readEnv(o.env,'APP__SCHEMA'),
       o.admitIdentity && ((person,tx)=>o.admitIdentity!({userId:person.userId,email:person.email,emailVerified:true,trustedIssuer:issuer.issuer},tx)));
+    if(!result.ok)console.warn(`[identity] trusted sign-in refused ${JSON.stringify({refusal:result.refusal,issuer:issuer.issuer})}`);
     if(!result.ok)return refuse(result.refusal,result.refusal==='parent_group_missing'?503:(result.refusal==='invalid_claims'||result.refusal==='replayed_token')?401:403);
     const cookies=await o.sessions.start(result.userId);
     const callback=trustedCallbackPath(form.get('callbackUrl'));

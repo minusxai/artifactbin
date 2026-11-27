@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { Pool } from 'pg';
 import type { Queryable } from '@artifactbin/contracts/db';
 import { PGlite } from '@electric-sql/pglite';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { assemble, ensureTable } from '@artifactbin/utils';
 import type { TransactionalQueryable } from '@artifactbin/contracts/identity-module';
 import { createHumanAuth, ensureAuthSchema, sessionStoreOf, type HumanAuth } from '../src/index';
@@ -489,6 +489,32 @@ describe('trusted-issuer sign-in', () => {
     const once = token({ sub: 'user_3' });
     expect((await post(target, { token: once })).status).toBe(303);
     await refused(await post(target, { token: once }), 401, 'replayed_token');
+  });
+
+  it('logs which check refused a token, with its times against this clock, and never a value from it', async () => {
+    const target = await app();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const logged = () => warn.mock.calls.map(([line]) => String(line)).filter(line => line.includes('trusted sign-in refused'));
+      await refused(await post(target, { token: token({ sub: 'secret_person', iat: now() - 400, exp: now() - 10 }) }), 401, 'invalid_token');
+      await refused(await post(target, { token: token({}, { key: stranger.privateKey }) }), 401, 'invalid_token');
+      await refused(await post(target, { token: token({ group: 'Not A Handle' }) }), 401, 'invalid_token');
+      const [expired, signature, handle] = logged().map(line => JSON.parse(line.slice(line.indexOf('{'))));
+      expect(expired).toMatchObject({ refusal: 'invalid_token', reason: 'expired', issuer: 'issuer-a' });
+      expect(expired.expiresIn).toBeGreaterThanOrEqual(-12); expect(expired.expiresIn).toBeLessThanOrEqual(-9);
+      expect(expired.issuedAgo).toBeGreaterThanOrEqual(399); expect(expired.issuedAgo).toBeLessThanOrEqual(402);
+      expect(signature).toEqual({ refusal: 'invalid_token', reason: 'signature', issuer: 'issuer-a' });
+      expect(handle).toMatchObject({ reason: 'group_0:handle' });
+      expect(logged().join('\n')).not.toMatch(/secret_person|Not A Handle/);
+    } finally { warn.mockRestore(); }
+  });
+
+  it('signs in with a group whose name is no usable label, carrying no name for it', async () => {
+    const target = await app();
+    for (const [sub, group_name] of [['blank_name', ''], ['long_name', 'x'.repeat(201)], ['spaces_name', '   ']] as const) {
+      const response = await post(target, { token: token({ sub, group: `group_${sub}`, group_name }) });
+      expect(response.status).toBe(303);
+    }
   });
 
   it('refuses another origin or none, and burns no token id doing so', async () => {
