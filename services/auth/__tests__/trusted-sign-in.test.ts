@@ -481,8 +481,8 @@ describe('trusted-issuer sign-in', () => {
     await refused(await post(target, { token: token({}, { key: stranger.privateKey }) }), 401, 'invalid_token');
     await refused(await post(target, { token: token({}, { header: { alg: 'HS256' } }) }), 401, 'invalid_token');
     await refused(await post(target, { token: token({ aud: 'another-app' }) }), 401, 'invalid_token');
-    await refused(await post(target, { token: token({ iat: now() - 400, exp: now() - 10 }) }), 401, 'invalid_token');
-    await refused(await post(target, { token: token({ exp: now() + 600 }) }), 401, 'invalid_token');
+    await refused(await post(target, { token: token({ iat: now() - 3700, exp: now() - 3610 }) }), 401, 'invalid_token');
+    await refused(await post(target, { token: token({ exp: now() + 3700 }) }), 401, 'invalid_token');
     await refused(await post(target, { token: token({ iat: undefined }) }), 401, 'invalid_token');
     await refused(await post(target, { token: token({ iss: 'issuer-b' }) }), 401, 'unknown_issuer');
     await refused(await post(target, { token: 'not.a.token' }), 401, 'invalid_token');
@@ -496,17 +496,37 @@ describe('trusted-issuer sign-in', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const logged = () => warn.mock.calls.map(([line]) => String(line)).filter(line => line.includes('trusted sign-in refused'));
-      await refused(await post(target, { token: token({ sub: 'secret_person', iat: now() - 400, exp: now() - 10 }) }), 401, 'invalid_token');
+      await refused(await post(target, { token: token({ sub: 'secret_person', iat: now() - 3700, exp: now() - 3610 }) }), 401, 'invalid_token');
       await refused(await post(target, { token: token({}, { key: stranger.privateKey }) }), 401, 'invalid_token');
       await refused(await post(target, { token: token({ group: 'Not A Handle' }) }), 401, 'invalid_token');
       const [expired, signature, handle] = logged().map(line => JSON.parse(line.slice(line.indexOf('{'))));
       expect(expired).toMatchObject({ refusal: 'invalid_token', reason: 'expired', issuer: 'issuer-a' });
-      expect(expired.expiresIn).toBeGreaterThanOrEqual(-12); expect(expired.expiresIn).toBeLessThanOrEqual(-9);
-      expect(expired.issuedAgo).toBeGreaterThanOrEqual(399); expect(expired.issuedAgo).toBeLessThanOrEqual(402);
+      expect(expired.expiresIn).toBeGreaterThanOrEqual(-3612); expect(expired.expiresIn).toBeLessThanOrEqual(-3609);
+      expect(expired.issuedAgo).toBeGreaterThanOrEqual(3699); expect(expired.issuedAgo).toBeLessThanOrEqual(3702);
       expect(signature).toEqual({ refusal: 'invalid_token', reason: 'signature', issuer: 'issuer-a' });
       expect(handle).toMatchObject({ reason: 'group_0:handle' });
       expect(logged().join('\n')).not.toMatch(/secret_person|Not A Handle/);
     } finally { warn.mockRestore(); }
+  });
+
+  it('shows a browser a page it can act on for a refusal, and other callers the JSON', async () => {
+    const target = await app();
+    const page = await post(target, { token: 'not.a.token' }, { origin: EMBEDDER, accept: 'text/html,application/xhtml+xml,*/*;q=0.8' });
+    expect(page.status).toBe(401);
+    expect(page.headers.get('content-type')).toMatch(/^text\/html/);
+    const text = await page.text();
+    expect(text).toContain('Reload this page to try again');
+    expect(text).toContain('Code: invalid_token');
+    expect(page.headers.getSetCookie()).toEqual([]);
+  });
+
+  it('accepts a token used late, issued by a clock minutes ahead, or claiming an hour, and still only once', async () => {
+    const target = await app();
+    const late = token({ sub: 'late_user', iat: now() - 1500, exp: now() - 1200 });
+    expect((await post(target, { token: late })).status).toBe(303);
+    await refused(await post(target, { token: late }), 401, 'replayed_token');
+    expect((await post(target, { token: token({ sub: 'ahead_user', iat: now() + 240, exp: now() + 400 }) })).status).toBe(303);
+    expect((await post(target, { token: token({ sub: 'long_user', iat: now(), exp: now() + 3500 }) })).status).toBe(303);
   });
 
   it('signs in with a group whose name is no usable label, carrying no name for it', async () => {

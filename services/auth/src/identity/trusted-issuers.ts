@@ -10,8 +10,15 @@ import {displayName} from '@artifactbin/contracts/account-resource';
 import {readEnv} from '../env';
 
 export const TRUSTED_SIGNIN_PATH = '/api/auth/trusted-sign-in';
-const MAX_LIFETIME_S = 300;
-const CLOCK_SKEW_S = 30;
+/**
+ * Generous on purpose: a token refused for time leaves a person on an error inside the issuer's page (a page left open
+ * before a click, a slow network, a clock off by minutes), while what keeps a token from being used twice is its `jti`,
+ * spent once and remembered until the token could no longer be accepted. A token is accepted until EXPIRY_GRACE_S past
+ * its own `exp`, may claim up to MAX_LIFETIME_S, and may be issued up to CLOCK_SKEW_S ahead of this server's clock.
+ */
+const MAX_LIFETIME_S = 3600;
+const CLOCK_SKEW_S = 300;
+const EXPIRY_GRACE_S = 3600;
 
 export interface TrustedIssuer {
   issuer: string;
@@ -66,7 +73,9 @@ function isOrigin(value: string): boolean {
 export interface TrustedGroup { handle: string; name?: string; tenancyId: string; parentHandles: string[] }
 export interface TrustedClaims {
   issuer: TrustedIssuer; subject: string; groups: TrustedGroup[]; activeGroup?: string;
-  name?: string; previousHandle?: string; jti: string; exp: number;
+  name?: string; previousHandle?: string; jti: string;
+  /** Until when this token can be accepted (its `exp` plus the grace): how long its spent `jti` must be remembered. */
+  exp: number;
 }
 export type TrustedTokenRefusal = 'invalid_token' | 'unknown_issuer' | 'forbidden_origin' | 'replayed_token';
 /** A refused token: the refusal the caller is told, and for the operator's log which check refused it, the issuer once
@@ -140,7 +149,7 @@ export function createTrustedTokenVerifier(issuers: ReadonlyMap<string, TrustedI
       const timed = typeof exp === 'number' && typeof iat === 'number' && Number.isFinite(exp) && Number.isFinite(iat);
       // How far the token's times sit from this server's clock: what tells an expired token from a skewed clock.
       const times = timed ? {expiresIn: Math.round(exp - seconds), issuedAgo: Math.round(seconds - iat)} : {};
-      const claimFault = !audienceOk ? 'audience' : !timed ? 'times' : exp <= seconds ? 'expired' : iat > seconds + CLOCK_SKEW_S ? 'issued_in_future'
+      const claimFault = !audienceOk ? 'audience' : !timed ? 'times' : exp + EXPIRY_GRACE_S <= seconds ? 'expired' : iat > seconds + CLOCK_SKEW_S ? 'issued_in_future'
         : exp <= iat || exp - iat > MAX_LIFETIME_S ? 'lifetime' : !plain(jti, 200) ? 'jti' : !plain(sub, 254) ? 'sub' : null;
       if (claimFault) return {ok: false, refusal: 'invalid_token', reason: claimFault, issuer: issuerName, ...times};
       // Every check above held: plain() proved jti and sub strings, `timed` the two numbers.
@@ -153,8 +162,8 @@ export function createTrustedTokenVerifier(issuers: ReadonlyMap<string, TrustedI
       prune(at);
       const key = `${issuer.issuer}\u0000${jti}`;
       if (used.has(key)) return {ok: false, refusal: 'replayed_token', reason: 'replayed', issuer: issuerName, ...times};
-      used.set(key, expires);
-      return {ok: true, claims: {issuer, subject, ...membership, previousHandle, jti: jti as string, exp: expires, name:displayName(payload.name)}};
+      used.set(key, expires + EXPIRY_GRACE_S);
+      return {ok: true, claims: {issuer, subject, ...membership, previousHandle, jti: jti as string, exp: expires + EXPIRY_GRACE_S, name:displayName(payload.name)}};
     },
   };
 }

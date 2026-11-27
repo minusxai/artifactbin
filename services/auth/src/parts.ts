@@ -208,12 +208,18 @@ export function loginRoutes(o: AuthOptions): Part<AuthEnv> {
  */
 /** The callback with `group=<the token's group>`, so the page opens in that group rather than one it remembered. */
 const withGroup=(path:string,groupId:string):string=>{const url=new URL(path,'http://callback.invalid');url.searchParams.set('group',groupId);return `${url.pathname}${url.search}${url.hash}`;};
+/** The page a browser sees for a refused sign-in: plain text, nothing from the request but the fixed error code. */
+const trustedRefusalPage=(error:string):string=>`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sign-in did not complete</title><body style="font:15px/1.5 system-ui,sans-serif;margin:2rem;color:#222"><h1 style="font-size:1.15rem;margin:0 0 .5rem">Sign-in did not complete</h1><p style="margin:0 0 .5rem">Reload this page to try again. If it keeps happening, contact your administrator with the code below.</p><p style="margin:0;color:#666;font-size:13px">Code: ${error.replace(/[^a-z_]/g,'')}</p></body>`;
 function mountTrustedSignIn(a:AuthApp,o:AuthOptions):void {
   const joinCompanyRoot=joinsCompanyRoot(o.env);
   const verifier=createTrustedTokenVerifier(trustedIssuersOf(o.env));
   const schema=readEnv(o.env,'AUTH__SCHEMA')??'auth';
   a.post(TRUSTED_SIGNIN_PATH,async c=>{
-    const refuse=(error:string,status:401|403|404|415|503)=>c.json({error},status,{'cache-control':'no-store'});
+    // A browser's form navigation (the usual caller, inside the issuer's page) gets a page a person can act on; any other
+    // caller the JSON refusal. Both name the same error code.
+    const refuse=(error:string,status:401|403|404|415|503)=>/\btext\/html\b/.test(c.req.header('accept')??'')
+      ?c.html(trustedRefusalPage(error),status,{'cache-control':'no-store'})
+      :c.json({error},status,{'cache-control':'no-store'});
     if(!verifier.enabled||!o.identityTransactions||!o.sessions.start)return refuse('not_found',404);
     if(!/^application\/x-www-form-urlencoded(?:;|$)/i.test(c.req.header('content-type')??''))return refuse('unsupported_media_type',415);
     const form=new URLSearchParams(await c.req.text());
