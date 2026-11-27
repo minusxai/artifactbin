@@ -129,7 +129,7 @@ with two groups under the existing `operators` handle look like this:
 }
 ```
 
-The usual signed `iss`, `aud`, `iat`, `exp` and single-use `jti` accompany those fields. Each
+The usual signed `iss`, `aud`, `iat`, `exp` and single-use `jti` accompany those fields. A token may claim up to an hour (`exp` − `iat`), is accepted until an hour past its `exp` and may be issued up to five minutes ahead of the receiver's clock; its `jti` is spent once. Each
 `parent_handles` path lists existing live handles from outermost to innermost. The first handle
 must resolve to the configured ceiling or a descendant. A new group is created directly under the
 last handle. An existing group must belong to the same issuer and already have the specified
