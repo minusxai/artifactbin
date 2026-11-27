@@ -77,7 +77,7 @@ export interface TrustedClaims {
   /** Until when this token can be accepted (its `exp` plus the grace): how long its spent `jti` must be remembered. */
   exp: number;
 }
-export type TrustedTokenRefusal = 'invalid_token' | 'unknown_issuer' | 'forbidden_origin' | 'replayed_token';
+type TrustedTokenRefusal = 'invalid_token' | 'unknown_issuer' | 'forbidden_origin' | 'replayed_token';
 /** A refused token: the refusal the caller is told, and for the operator's log which check refused it, the issuer once
  * known and, once the signature holds, how far its times sit from this server's clock. Never a value from the token. */
 export interface TrustedTokenFailure { ok: false; refusal: TrustedTokenRefusal; reason: string; issuer?: string; expiresIn?: number; issuedAgo?: number }
